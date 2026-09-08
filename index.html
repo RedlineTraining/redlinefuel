@@ -1431,7 +1431,7 @@
   // Two providers supported:
   //  - gemini    (default) Google AI Studio free tier: 1,500 requests/day, no credit card
   //  - anthropic (optional) paid, pennies per scan
-  async function callClaude(messages, system, maxTokens){
+  async function callClaude(messages, system, maxTokens, opts){
     const provider = settings.provider || 'gemini';
     const apiKey = (settings.apiKey || '').trim();
     if(!apiKey){
@@ -1439,7 +1439,7 @@
     }
     return provider === 'anthropic'
       ? callAnthropic(messages, system, maxTokens, apiKey)
-      : callGemini(messages, system, maxTokens, apiKey);
+      : callGemini(messages, system, maxTokens, apiKey, opts || {});
   }
 
   // Convert our Anthropic-shaped messages into Gemini's format
@@ -1495,11 +1495,20 @@
       || /no longer available|not found|not supported|deprecated|does not exist/i.test(msg);
   }
 
-  async function callGemini(messages, system, maxTokens, apiKey){
+  async function callGemini(messages, system, maxTokens, apiKey, opts){
+    opts = opts || {};
     const body = {
       contents: toGeminiContents(messages),
-      generationConfig: { maxOutputTokens: maxTokens || 1200, temperature: 0.4 }
+      generationConfig: {
+        // Newer Gemini models spend output tokens on internal "thinking", which can
+        // leave nothing for the actual answer. Give plenty of headroom and turn it off.
+        maxOutputTokens: Math.max(maxTokens || 1200, 2048),
+        temperature: 0.4,
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     };
+    // Ask for strict JSON when we need to parse the result
+    if(opts.json) body.generationConfig.responseMimeType = 'application/json';
     if(system) body.systemInstruction = { parts: [{ text: system }] };
 
     // try the known-good model first, then work through the list
@@ -1518,7 +1527,13 @@
         if(!cand) throw new Error('No response returned — try again.');
         if(cand.finishReason === 'SAFETY') throw new Error('That image was blocked by a safety filter. Try another photo.');
         const parts = (cand.content && cand.content.parts) || [];
-        return parts.map(p => p.text || '').join('').trim();
+        const text = parts.map(p => p.text || '').join('').trim();
+        if(!text){
+          console.error('Empty Gemini response:', JSON.stringify(data).slice(0, 800));
+          if(cand.finishReason === 'MAX_TOKENS') throw new Error('Response was cut off. Try a simpler photo.');
+          throw new Error('Model returned nothing (' + (cand.finishReason || 'unknown reason') + ').');
+        }
+        return text;
       }
 
       lastMsg = (data.error && data.error.message) ? data.error.message : `Request failed (${res.status})`;
@@ -1526,6 +1541,23 @@
       // model retired or unknown -> try the next one
       if(isModelUnavailable(res, data)){
         console.warn(`Model ${model} unavailable, trying next...`);
+        continue;
+      }
+
+      // some models reject thinkingConfig / responseMimeType — retry once without them
+      if(res.status === 400 && /thinking|thinkingConfig|responseMimeType|Unknown name/i.test(lastMsg)){
+        console.warn('Retrying', model, 'without thinking/JSON config');
+        const plain = JSON.parse(JSON.stringify(body));
+        delete plain.generationConfig.thinkingConfig;
+        delete plain.generationConfig.responseMimeType;
+        const retry = await geminiRequest(model, plain, apiKey);
+        if(retry.res.ok && !retry.data.error){
+          geminiWorkingModel = model;
+          const rc = (retry.data.candidates || [])[0];
+          const rparts = (rc && rc.content && rc.content.parts) || [];
+          const rtext = rparts.map(p => p.text || '').join('').trim();
+          if(rtext) return rtext;
+        }
         continue;
       }
 
@@ -1568,12 +1600,27 @@
     const block = (data.content||[]).find(b=>b.type==='text');
     return block ? block.text : '';
   }
+  let lastRawModelResponse = '';
+
   function extractJson(text){
+    if(!text) return null;
+    // 1. straight parse (JSON mode returns clean JSON)
+    try{ return JSON.parse(text.trim()); }catch(e){}
+    // 2. strip markdown fences
     const fenced = text.match(/```json([\s\S]*?)```/i) || text.match(/```([\s\S]*?)```/);
     const raw = fenced ? fenced[1] : text;
+    try{ return JSON.parse(raw.trim()); }catch(e){}
+    // 3. take the outermost {...}
     const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');
-    if(start===-1||end===-1) return null;
-    try{ return JSON.parse(raw.slice(start,end+1)); }catch(e){ return null; }
+    if(start === -1 || end === -1 || end <= start){
+      console.error('No JSON found in model response:', text.slice(0, 500));
+      return null;
+    }
+    try{ return JSON.parse(raw.slice(start, end+1)); }
+    catch(e){
+      console.error('JSON parse failed. Raw response:', text.slice(0, 500));
+      return null;
+    }
   }
 
   const ANALYSIS_SYSTEM = `You are a food recognition and nutrition estimation assistant inside a nutrition app. You give thoughtful, well-reasoned estimates — you are not a basic classifier, but you are also honest that a single photo or description is an estimate, not a lab measurement.
@@ -1622,8 +1669,9 @@ Respond with ONLY a JSON object, no other text, no markdown fences:
         { type:"image", source:{ type:"base64", media_type:mediaType, data:base64 } },
         { type:"text", text:"Identify this food/meal and estimate its full nutrition breakdown." }
       ]
-    }], ANALYSIS_SYSTEM, 1200);
+    }], ANALYSIS_SYSTEM, 1200, { json: true });
     const result = extractJson(text);
+    if(!result) lastRawModelResponse = text;
     if(result){
       const match = findCorrection(result.name);
       if(match){
@@ -1649,8 +1697,10 @@ Respond with ONLY a JSON object, no other text, no markdown fences:
         _corrected:true
       };
     }
-    const text = await callClaude([{ role:"user", content: `Estimate the nutrition for: ${desc}` }], ANALYSIS_SYSTEM, 1000);
-    return extractJson(text);
+    const text = await callClaude([{ role:"user", content: `Estimate the nutrition for: ${desc}` }], ANALYSIS_SYSTEM, 1000, { json: true });
+    const parsed = extractJson(text);
+    if(!parsed) lastRawModelResponse = text;
+    return parsed;
   }
 
   function contextSummary(){
@@ -1797,7 +1847,14 @@ If — and only if — the user describes a specific meal or food they ate or wa
         }
         const result = await analyzePhoto(base64, mediaType);
         clearInterval(timer); overlay.classList.add('hidden');
-        if(!result){ showToast("Couldn't quite identify that — try again or enter numbers manually."); return; }
+        if(!result){
+          const snippet = (lastRawModelResponse || '').replace(/\s+/g,' ').trim().slice(0,90);
+          console.error('Full model response:', lastRawModelResponse);
+          showToast(snippet
+            ? "Couldn't read the result. Model said: " + snippet
+            : "Model returned an empty response — try again.");
+          return;
+        }
         if(!result._corrected) await incrementUsage('scans');
         handleAnalysisResult(result, 'photo');
       }catch(err){
