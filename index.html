@@ -1495,81 +1495,107 @@
       || /no longer available|not found|not supported|deprecated|does not exist/i.test(msg);
   }
 
-  async function callGemini(messages, system, maxTokens, apiKey, opts){
-    opts = opts || {};
-    const body = {
-      contents: toGeminiContents(messages),
+  // Build progressively simpler request bodies. Different Gemini models accept
+  // different options, so if one is rejected we drop features and retry rather
+  // than failing outright.
+  function buildGeminiVariants(messages, system, maxTokens, opts){
+    const contents = toGeminiContents(messages);
+    const tokens = Math.max(maxTokens || 1200, 2048);
+    const variants = [];
+
+    // 1. everything: no-thinking + strict JSON + system instruction
+    const full = {
+      contents,
       generationConfig: {
-        // Newer Gemini models spend output tokens on internal "thinking", which can
-        // leave nothing for the actual answer. Give plenty of headroom and turn it off.
-        maxOutputTokens: Math.max(maxTokens || 1200, 2048),
+        maxOutputTokens: tokens,
         temperature: 0.4,
         thinkingConfig: { thinkingBudget: 0 }
       }
     };
-    // Ask for strict JSON when we need to parse the result
-    if(opts.json) body.generationConfig.responseMimeType = 'application/json';
-    if(system) body.systemInstruction = { parts: [{ text: system }] };
+    if(opts.json) full.generationConfig.responseMimeType = 'application/json';
+    if(system) full.systemInstruction = { parts: [{ text: system }] };
+    variants.push(full);
 
-    // try the known-good model first, then work through the list
-    const candidates = geminiWorkingModel
+    // 2. drop thinkingConfig (unsupported on some models)
+    const noThinking = JSON.parse(JSON.stringify(full));
+    delete noThinking.generationConfig.thinkingConfig;
+    variants.push(noThinking);
+
+    // 3. drop JSON mime type too
+    const noJson = JSON.parse(JSON.stringify(noThinking));
+    delete noJson.generationConfig.responseMimeType;
+    variants.push(noJson);
+
+    // 4. no systemInstruction — fold the system prompt into the first user turn
+    const folded = { contents: JSON.parse(JSON.stringify(contents)),
+                     generationConfig: { maxOutputTokens: tokens, temperature: 0.4 } };
+    if(system && folded.contents.length){
+      folded.contents[0].parts.unshift({ text: system + '\n\n' });
+    }
+    variants.push(folded);
+
+    // 5. bare minimum
+    const bare = { contents: JSON.parse(JSON.stringify(contents)) };
+    if(system && bare.contents.length){
+      bare.contents[0].parts.unshift({ text: system + '\n\n' });
+    }
+    variants.push(bare);
+
+    return variants;
+  }
+
+  function readGeminiText(data){
+    const cand = (data.candidates || [])[0];
+    if(!cand) return { text:'', reason:'no-candidate' };
+    const parts = (cand.content && cand.content.parts) || [];
+    return { text: parts.map(p => p.text || '').join('').trim(), reason: cand.finishReason || '' };
+  }
+
+  async function callGemini(messages, system, maxTokens, apiKey, opts){
+    opts = opts || {};
+    const variants = buildGeminiVariants(messages, system, maxTokens, opts);
+
+    const models = geminiWorkingModel
       ? [geminiWorkingModel, ...GEMINI_MODELS.filter(m => m !== geminiWorkingModel)]
       : GEMINI_MODELS.slice();
 
-    let lastMsg = 'No usable Gemini model found.';
+    let lastMsg = 'No usable Gemini configuration found.';
+    let hardError = null;
 
-    for(const model of candidates){
-      const { res, data } = await geminiRequest(model, body, apiKey);
+    for(const model of models){
+      for(let i = 0; i < variants.length; i++){
+        const { res, data } = await geminiRequest(model, variants[i], apiKey);
 
-      if(res.ok && !data.error){
-        geminiWorkingModel = model; // remember for the rest of the session
-        const cand = (data.candidates || [])[0];
-        if(!cand) throw new Error('No response returned — try again.');
-        if(cand.finishReason === 'SAFETY') throw new Error('That image was blocked by a safety filter. Try another photo.');
-        const parts = (cand.content && cand.content.parts) || [];
-        const text = parts.map(p => p.text || '').join('').trim();
-        if(!text){
-          console.error('Empty Gemini response:', JSON.stringify(data).slice(0, 800));
-          if(cand.finishReason === 'MAX_TOKENS') throw new Error('Response was cut off. Try a simpler photo.');
-          throw new Error('Model returned nothing (' + (cand.finishReason || 'unknown reason') + ').');
-        }
-        return text;
-      }
-
-      lastMsg = (data.error && data.error.message) ? data.error.message : `Request failed (${res.status})`;
-
-      // model retired or unknown -> try the next one
-      if(isModelUnavailable(res, data)){
-        console.warn(`Model ${model} unavailable, trying next...`);
-        continue;
-      }
-
-      // some models reject thinkingConfig / responseMimeType — retry once without them
-      if(res.status === 400 && /thinking|thinkingConfig|responseMimeType|Unknown name/i.test(lastMsg)){
-        console.warn('Retrying', model, 'without thinking/JSON config');
-        const plain = JSON.parse(JSON.stringify(body));
-        delete plain.generationConfig.thinkingConfig;
-        delete plain.generationConfig.responseMimeType;
-        const retry = await geminiRequest(model, plain, apiKey);
-        if(retry.res.ok && !retry.data.error){
+        if(res.ok && !data.error){
           geminiWorkingModel = model;
-          const rc = (retry.data.candidates || [])[0];
-          const rparts = (rc && rc.content && rc.content.parts) || [];
-          const rtext = rparts.map(p => p.text || '').join('').trim();
-          if(rtext) return rtext;
+          const { text, reason } = readGeminiText(data);
+          if(reason === 'SAFETY') throw new Error('That image was blocked by a safety filter. Try another photo.');
+          if(text) return text;
+          console.warn('Empty response from', model, 'variant', i, 'reason:', reason);
+          lastMsg = 'Model returned nothing (' + (reason || 'unknown') + ')';
+          continue; // try a simpler variant
         }
-        continue;
-      }
 
-      // real errors: stop and report clearly
-      if(res.status === 400 && /API key|API_KEY/i.test(lastMsg)) throw new Error('API key rejected — check it in Settings.');
-      if(res.status === 429) throw new Error("You've hit Google's free daily limit. Try again tomorrow.");
-      if(res.status === 403) throw new Error('Key not authorised — enable the Generative Language API for it.');
-      console.error('Gemini API error:', lastMsg, data);
-      throw new Error(lastMsg);
+        lastMsg = (data.error && data.error.message) ? data.error.message : `Request failed (${res.status})`;
+        console.warn(`Gemini ${model} variant ${i} failed:`, lastMsg);
+
+        // model doesn't exist -> skip remaining variants, go to next model
+        if(isModelUnavailable(res, data)) break;
+
+        // key/quota problems are real — no point retrying anything
+        if(res.status === 400 && /API[ _]?key/i.test(lastMsg)){ hardError = 'API key rejected — check it in Settings.'; break; }
+        if(res.status === 429){ hardError = "You've hit Google's free daily limit. Try again tomorrow."; break; }
+        if(res.status === 403){ hardError = 'Key not authorised — enable the Generative Language API for it.'; break; }
+
+        // any other 400 (e.g. "invalid argument") -> try the next, simpler variant
+        if(res.status === 400) continue;
+
+        // 5xx or anything else -> try next variant as well
+      }
+      if(hardError) throw new Error(hardError);
     }
 
-    throw new Error('Google retired the models this app knows about. Latest message: ' + lastMsg);
+    throw new Error('Scanning failed. Last message from Google: ' + lastMsg);
   }
 
   async function callAnthropic(messages, system, maxTokens, apiKey){
