@@ -547,9 +547,13 @@
     </div>
 
     <div class="modal-sub">AI scanning</div>
-    <div class="t-sub" style="margin-bottom:10px; line-height:1.5;">Photo and text analysis needs your own Anthropic API key. Get one at console.anthropic.com — it's stored only on this device and you're billed per scan (typically well under a cent each).</div>
+    <div class="ob-unit-toggle" id="providerToggle" style="margin-bottom:10px;">
+      <button data-p="gemini">Google (free)</button>
+      <button data-p="anthropic">Anthropic (paid)</button>
+    </div>
+    <div class="t-sub" id="providerHelp" style="margin-bottom:10px; line-height:1.5;"></div>
     <div class="settings-field-row">
-      <div class="field"><label>Anthropic API key</label><input type="password" id="apiKeyInput" placeholder="sk-ant-..."></div>
+      <div class="field"><label id="apiKeyLabel">API key</label><input type="password" id="apiKeyInput" placeholder="Paste your key"></div>
     </div>
     <div class="t-sub" id="apiKeyStatus" style="margin-bottom:6px;"></div>
 
@@ -618,7 +622,7 @@
 
   let profile = null; // set after onboarding
   let targets = { calories:2200, protein:170, carbs:220, fat:70 };
-  let settings = { autoLog:false, sleepTarget:8, plan:'free' };
+  let settings = { autoLog:false, sleepTarget:8, plan:'free', provider:'gemini', apiKey:'' };
   const FREE_LIMITS = { scans: Infinity, chat: Infinity };
   let currentDate = toDateKey(new Date());
   let entries = [];
@@ -804,13 +808,29 @@
   });
   document.getElementById('closeTrustModal').addEventListener('click', ()=>document.getElementById('trustModal').classList.add('hidden'));
   function updateApiKeyStatus(){
+    const provider = settings.provider || 'gemini';
+    document.querySelectorAll('#providerToggle button').forEach(b=>{
+      b.classList.toggle('active', b.getAttribute('data-p') === provider);
+    });
+    const help = document.getElementById('providerHelp');
+    const label = document.getElementById('apiKeyLabel');
+    const input = document.getElementById('apiKeyInput');
+    if(provider === 'anthropic'){
+      if(help) help.innerHTML = "Paid — roughly a fraction of a cent per scan. Get a key at console.anthropic.com and add credit.";
+      if(label) label.textContent = 'Anthropic API key';
+      if(input) input.placeholder = 'sk-ant-...';
+    } else {
+      if(help) help.innerHTML = "Free — 1,500 scans a day, no credit card needed. Get a key at aistudio.google.com/apikey (sign in with Google, click Create API key).";
+      if(label) label.textContent = 'Google AI Studio API key';
+      if(input) input.placeholder = 'AIza...';
+    }
     const el = document.getElementById('apiKeyStatus');
     if(!el) return;
     if(settings.apiKey && settings.apiKey.trim()){
-      el.textContent = 'Key saved on this device. AI scanning is enabled.';
+      el.textContent = 'Key saved on this device. Scanning is enabled.';
       el.style.color = 'var(--text-dim)';
     } else {
-      el.textContent = 'No key set — photo and text scanning are disabled. Manual logging still works.';
+      el.textContent = 'No key set — scanning is disabled. Manual logging still works.';
       el.style.color = 'var(--red)';
     }
   }
@@ -818,7 +838,7 @@
   function requireApiKey(){
     if(settings.apiKey && settings.apiKey.trim()) return true;
     closeSheet();
-    showToast('Add your Anthropic API key in Settings to enable AI scanning.');
+    showToast('Add a free Google AI key in Settings to enable scanning.');
     openSettings();
     return false;
   }
@@ -1408,11 +1428,75 @@
   }
 
   // ================= ANTHROPIC API =================
+  // Two providers supported:
+  //  - gemini    (default) Google AI Studio free tier: 1,500 requests/day, no credit card
+  //  - anthropic (optional) paid, pennies per scan
   async function callClaude(messages, system, maxTokens){
+    const provider = settings.provider || 'gemini';
     const apiKey = (settings.apiKey || '').trim();
     if(!apiKey){
-      throw new Error('No API key set. Open Settings and add your Anthropic API key to enable AI scanning.');
+      throw new Error('No API key set. Open Settings and add a free Google AI key to enable scanning.');
     }
+    return provider === 'anthropic'
+      ? callAnthropic(messages, system, maxTokens, apiKey)
+      : callGemini(messages, system, maxTokens, apiKey);
+  }
+
+  // Convert our Anthropic-shaped messages into Gemini's format
+  function toGeminiContents(messages){
+    return messages.map(m => {
+      const parts = [];
+      if(typeof m.content === 'string'){
+        parts.push({ text: m.content });
+      } else if(Array.isArray(m.content)){
+        m.content.forEach(block => {
+          if(block.type === 'text') parts.push({ text: block.text });
+          else if(block.type === 'image' && block.source && block.source.type === 'base64'){
+            parts.push({ inline_data: { mime_type: block.source.media_type, data: block.source.data } });
+          }
+        });
+      }
+      return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+    });
+  }
+
+  async function callGemini(messages, system, maxTokens, apiKey){
+    const model = 'gemini-2.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const body = {
+      contents: toGeminiContents(messages),
+      generationConfig: { maxOutputTokens: maxTokens || 1200, temperature: 0.4 }
+    };
+    if(system) body.systemInstruction = { parts: [{ text: system }] };
+
+    let res;
+    try{
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }catch(networkErr){
+      throw new Error('Network error reaching Google — check your connection and try again.');
+    }
+    let data;
+    try{ data = await res.json(); }catch(e){ throw new Error('Unexpected response from Google.'); }
+    if(!res.ok || data.error){
+      let msg = (data.error && data.error.message) ? data.error.message : `Request failed (${res.status})`;
+      if(res.status === 400 && /API key/i.test(msg)) msg = 'API key rejected — check it in Settings.';
+      if(res.status === 429) msg = "You've hit Google's free daily limit (1,500/day). Try again tomorrow.";
+      if(res.status === 403) msg = 'Key not authorised — make sure the Generative Language API is enabled for it.';
+      console.error('Gemini API error:', msg, data);
+      throw new Error(msg);
+    }
+    const cand = (data.candidates || [])[0];
+    if(!cand) throw new Error('No response returned — try again.');
+    if(cand.finishReason === 'SAFETY') throw new Error('That image was blocked by a safety filter. Try another photo.');
+    const parts = (cand.content && cand.content.parts) || [];
+    return parts.map(p => p.text || '').join('').trim();
+  }
+
+  async function callAnthropic(messages, system, maxTokens, apiKey){
     let res;
     try{
       res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1421,7 +1505,6 @@
           "Content-Type":"application/json",
           "x-api-key": apiKey,
           "anthropic-version": "2023-06-01",
-          // required for calling the API directly from a browser
           "anthropic-dangerous-direct-browser-access": "true"
         },
         body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens: maxTokens||1200, system, messages })
@@ -1847,7 +1930,7 @@ If — and only if — the user describes a specific meal or food they ate or wa
     const text = input.value.trim();
     if(!text) return;
     if(!settings.apiKey || !settings.apiKey.trim()){
-      showToast('Add your Anthropic API key in Settings to use the coach.');
+      showToast('Add a free Google AI key in Settings to use the coach.');
       openSettings();
       return;
     }
@@ -1992,6 +2075,13 @@ If — and only if — the user describes a specific meal or food they ate or wa
     document.getElementById('onboardingView').classList.remove('hidden');
     renderOnboardingStep();
   });
+  document.querySelectorAll('#providerToggle button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      settings.provider = b.getAttribute('data-p');
+      updateApiKeyStatus();
+    });
+  });
+
   document.getElementById('saveSettings').addEventListener('click', async ()=>{
     targets = {
       calories: Number(document.getElementById('targetCal').value)||targets.calories,
@@ -2002,6 +2092,7 @@ If — and only if — the user describes a specific meal or food they ate or wa
     settings.sleepTarget = Number(document.getElementById('targetSleep').value)||8;
     settings.autoLog = document.getElementById('autoLogSwitch').classList.contains('on');
     settings.apiKey = document.getElementById('apiKeyInput').value.trim();
+    // settings.provider is set by the toggle handler above
     const newWeightDisplay = Number(document.getElementById('profWeight').value);
     if(newWeightDisplay && profile){ profile.weightKg = profile.units==='imperial' ? lbToKg(newWeightDisplay) : newWeightDisplay; await saveProfile(); }
     await saveTargets(); await saveSettings();
