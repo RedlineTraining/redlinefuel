@@ -1,3 +1,12 @@
+  function requireApiKey(){
+    if(settings.apiKey && settings.apiKey.trim()) return true;
+    if(sb && currentUser) return true; // server proxy handles it
+    closeSheet();
+    showToast('Sign in to scan, or add your own API key in Settings.');
+    openSettings();
+    return false;
+  }
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -327,6 +336,39 @@
   </div>
 
   <!-- ===================== ONBOARDING ===================== -->
+  <!-- ===================== AUTH ===================== -->
+  <div id="authView" class="hidden" style="padding:26px 24px 40px; min-height:100vh; display:flex; flex-direction:column;">
+    <div style="flex:1; display:flex; flex-direction:column; justify-content:center;">
+      <div style="text-align:center; margin-bottom:34px;">
+        <svg width="62" height="62" viewBox="0 0 220 220" style="margin-bottom:14px;">
+          <circle cx="110" cy="110" r="92" fill="none" stroke="rgba(255,255,255,0.09)" stroke-width="12"/>
+          <circle cx="110" cy="110" r="92" fill="none" stroke="#E8302A" stroke-width="12" stroke-linecap="round"
+            stroke-dasharray="578" stroke-dashoffset="160" transform="rotate(-90 110 110)"/>
+        </svg>
+        <div class="serif" style="font-size:30px; font-weight:500;">Redline</div>
+        <div style="font-size:13px; color:var(--text-dim); margin-top:4px;">Snap it. Track it. Done.</div>
+      </div>
+
+      <div class="ob-field">
+        <label>Email</label>
+        <input type="email" id="authEmail" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@email.com">
+      </div>
+      <div class="ob-field">
+        <label>Password</label>
+        <input type="password" id="authPassword" autocomplete="current-password" placeholder="At least 6 characters">
+      </div>
+
+      <div id="authError" style="font-size:12px; color:var(--red); min-height:18px; margin-bottom:10px; line-height:1.4;"></div>
+
+      <div class="ob-actions" style="margin-bottom:10px;">
+        <button class="ob-btn ob-btn-primary" id="authSubmitBtn">Log in</button>
+      </div>
+      <button class="edit-toggle-link" id="authToggleMode" style="align-self:center;">New here? Create an account</button>
+      <button class="edit-toggle-link" id="authForgot" style="align-self:center; margin-top:10px;">Forgot password?</button>
+      <button class="edit-toggle-link" id="authOffline" style="align-self:center; margin-top:18px; color:var(--text-faint);">Use offline on this device only</button>
+    </div>
+  </div>
+
   <div id="onboardingView">
     <div class="ob-dots" id="obDots"></div>
     <div class="ob-step" id="obStepContainer"></div>
@@ -546,6 +588,15 @@
       <button id="managePlanBtn"></button>
     </div>
 
+    <div class="modal-sub">Account</div>
+    <div class="toggle-row">
+      <div>
+        <div class="t-label" id="accountEmail">Not signed in</div>
+        <div class="t-sub" id="syncStatus"></div>
+      </div>
+      <button class="edit-toggle-link" id="logoutBtn" style="margin:0;">Log out</button>
+    </div>
+
     <div class="modal-sub">AI scanning</div>
     <div class="ob-unit-toggle" id="providerToggle" style="margin-bottom:10px;">
       <button data-p="gemini">Google (free)</button>
@@ -613,6 +664,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 (function(){
   const ACTIVITY_LABELS = {
@@ -647,6 +699,90 @@
   }
 
   // ================= STORAGE =================
+  // ================= CLOUD SYNC (Supabase) =================
+  // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
+  // The anon key is designed to be public — row-level security is what protects data.
+  const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
+
+  const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
+  let sb = null;
+  let currentUser = null;
+  let syncing = false;
+
+  if(syncConfigured && typeof window.supabase !== 'undefined'){
+    try{
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage }
+      });
+    }catch(e){ console.error('Supabase init failed:', e); sb = null; }
+  }
+
+  function setSyncStatus(text, isError){
+    const el = document.getElementById('syncStatus');
+    if(!el) return;
+    el.textContent = text || '';
+    el.style.color = isError ? 'var(--red)' : 'var(--text-faint)';
+  }
+
+  // Pull every row for this user into local storage so the app reads normally.
+  async function pullFromCloud(){
+    if(!sb || !currentUser) return false;
+    try{
+      setSyncStatus('Syncing...');
+      const { data, error } = await sb.from('app_data')
+        .select('key, value, updated_at')
+        .eq('user_id', currentUser.id);
+      if(error) throw error;
+      (data || []).forEach(row => {
+        memStore[row.key] = row.value;
+        lsSet(row.key, row.value);
+      });
+      setSyncStatus('Synced just now');
+      return true;
+    }catch(e){
+      console.error('Pull failed:', e);
+      setSyncStatus('Sync failed — working offline', true);
+      return false;
+    }
+  }
+
+  // Push a single key. Queued so rapid logging doesn't fire dozens of requests.
+  const pushQueue = new Map();
+  let pushTimer = null;
+  function queuePush(key, value){
+    if(!sb || !currentUser) return;
+    pushQueue.set(key, value);
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(flushPushQueue, 700);
+  }
+  async function flushPushQueue(){
+    if(!sb || !currentUser || pushQueue.size === 0) return;
+    const rows = [];
+    pushQueue.forEach((value, key) => {
+      rows.push({ user_id: currentUser.id, key, value, updated_at: new Date().toISOString() });
+    });
+    pushQueue.clear();
+    try{
+      syncing = true;
+      const { error } = await sb.from('app_data').upsert(rows, { onConflict: 'user_id,key' });
+      if(error) throw error;
+      setSyncStatus('Synced just now');
+    }catch(e){
+      console.error('Push failed:', e);
+      setSyncStatus('Sync failed — saved on this device', true);
+    }finally{ syncing = false; }
+  }
+
+  // Push everything currently stored locally (used right after sign-up).
+  async function pushAllLocal(){
+    if(!sb || !currentUser) return;
+    const keys = ['profile','targets','settings','chatHistory','corrections'];
+    Object.keys(memStore).forEach(k => { if(k.indexOf('entries:')===0 || k.indexOf('widgets:')===0) keys.push(k); });
+    keys.forEach(k => { if(typeof memStore[k] !== 'undefined') pushQueue.set(k, memStore[k]); });
+    await flushPushQueue();
+  }
+
   // Storage shim with layered fallbacks. The platform's window.storage fails on some
   // devices, so we try several real persistence backends before giving up to memory.
   // Every layer is wrapped so this NEVER throws.
@@ -704,6 +840,8 @@
         if(lsSet(key, value)) persisted = true;
       }
 
+      queuePush(key, value); // no-op when signed out
+
       updateLayerState();
       return persisted;
     }
@@ -750,8 +888,129 @@
     storageWorking = !visible;
   }
 
+  // ================= AUTH FLOW =================
+  let authMode = 'login'; // or 'signup'
+
+  function showAuth(){
+    document.getElementById('authView').classList.remove('hidden');
+    document.getElementById('onboardingView').classList.add('hidden');
+    document.getElementById('mainApp').classList.add('hidden');
+    renderAuthMode();
+  }
+  function renderAuthMode(){
+    const isSignup = authMode === 'signup';
+    document.getElementById('authSubmitBtn').textContent = isSignup ? 'Create account' : 'Log in';
+    document.getElementById('authToggleMode').textContent = isSignup
+      ? 'Already have an account? Log in'
+      : 'New here? Create an account';
+    document.getElementById('authPassword').setAttribute('autocomplete', isSignup ? 'new-password' : 'current-password');
+    document.getElementById('authForgot').classList.toggle('hidden', isSignup);
+    document.getElementById('authError').textContent = '';
+  }
+  function authError(msg){ document.getElementById('authError').textContent = msg || ''; }
+
+  async function handleAuthSubmit(){
+    const btn = document.getElementById('authSubmitBtn');
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    if(!email || !password){ authError('Enter your email and password.'); return; }
+    if(password.length < 6){ authError('Password must be at least 6 characters.'); return; }
+    if(!sb){ authError('Sync is not configured for this app.'); return; }
+
+    btn.disabled = true;
+    btn.textContent = authMode === 'signup' ? 'Creating...' : 'Logging in...';
+    authError('');
+
+    try{
+      if(authMode === 'signup'){
+        const { data, error } = await sb.auth.signUp({ email, password });
+        if(error) throw error;
+        if(!data.session){
+          authError('Check your email to confirm your account, then log in.');
+          authMode = 'login'; renderAuthMode();
+          return;
+        }
+        currentUser = data.user;
+        await afterLogin(true);
+      } else {
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if(error) throw error;
+        currentUser = data.user;
+        await afterLogin(false);
+      }
+    }catch(e){
+      const m = (e && e.message) ? e.message : 'Something went wrong.';
+      if(/Invalid login/i.test(m)) authError('Wrong email or password.');
+      else if(/already registered/i.test(m)) authError('That email already has an account — log in instead.');
+      else authError(m);
+    }finally{
+      btn.disabled = false;
+      renderAuthMode();
+    }
+  }
+
+  // After a successful login: pull cloud data, then start the app.
+  async function afterLogin(isNewAccount){
+    document.getElementById('authView').classList.add('hidden');
+    if(!isNewAccount) await pullFromCloud();
+
+    // reload state from storage now that cloud data has landed
+    try{ const r=await store.get('profile'); if(r&&r.value) profile=JSON.parse(r.value); }catch(e){}
+    try{ const r=await store.get('targets'); if(r&&r.value) targets=JSON.parse(r.value); }catch(e){}
+    try{ const r=await store.get('settings'); if(r&&r.value) settings={...settings, ...JSON.parse(r.value)}; }catch(e){}
+    try{ const r=await store.get('chatHistory'); if(r&&r.value) chatHistory=JSON.parse(r.value); }catch(e){}
+    await loadCorrections();
+    await loadDay(currentDate);
+
+    if(isNewAccount && profile && profile.onboarded) await pushAllLocal();
+
+    if(profile && profile.onboarded){
+      document.getElementById('mainApp').classList.remove('hidden');
+      mainInited = false;
+      initMainApp();
+    } else {
+      document.getElementById('onboardingView').classList.remove('hidden');
+      obState = { step:0, data:{} };
+      renderOnboardingStep();
+    }
+  }
+
+  async function handleLogout(){
+    try{ await flushPushQueue(); }catch(e){}
+    try{ if(sb) await sb.auth.signOut(); }catch(e){}
+    currentUser = null;
+    // clear local copies so the next person doesn't see this account's data
+    try{
+      Object.keys(memStore).forEach(k => delete memStore[k]);
+      if(localOK && typeof localStorage !== 'undefined'){
+        Object.keys(localStorage).filter(k => k.indexOf(PREFIX) === 0).forEach(k => localStorage.removeItem(k));
+      }
+    }catch(e){}
+    profile = null; entries = []; chatHistory = []; corrections = {};
+    location.reload();
+  }
+
   async function loadAll(){
     await testStorage();
+
+    // signed in already?
+    if(sb){
+      try{
+        const { data } = await sb.auth.getSession();
+        if(data && data.session){ currentUser = data.session.user; }
+      }catch(e){ console.warn('Session check failed:', e); }
+    }
+
+    if(sb && !currentUser){
+      showAuth();
+      return; // wait for login
+    }
+    if(currentUser){
+      await afterLogin(false);
+      return;
+    }
+
+    // sync not configured -> original local-only behaviour
     try{ const r=await store.get('profile'); if(r&&r.value) profile=JSON.parse(r.value); }catch(e){}
     try{ const r=await store.get('targets'); if(r&&r.value) targets=JSON.parse(r.value); }catch(e){}
     try{ const r=await store.get('settings'); if(r&&r.value) settings={...settings, ...JSON.parse(r.value)}; }catch(e){}
@@ -764,9 +1023,11 @@
       document.getElementById('mainApp').classList.remove('hidden');
       initMainApp();
     } else {
+      document.getElementById('onboardingView').classList.remove('hidden');
       renderOnboardingStep();
     }
   }
+
   async function loadDay(dateKey){
     try{ const r=await store.get('entries:'+dateKey); entries=(r&&r.value)?JSON.parse(r.value):[]; }catch(e){ entries=[]; }
     try{ const r=await store.get('widgets:'+dateKey); widgets=(r&&r.value)?JSON.parse(r.value):{water:0,sleep:''}; }catch(e){ widgets={water:0,sleep:''}; }
@@ -811,6 +1072,19 @@
     showToast('Premium activated (prototype) — no real payment was processed.');
   });
   document.getElementById('closeTrustModal').addEventListener('click', ()=>document.getElementById('trustModal').classList.add('hidden'));
+  function updateAccountDisplay(){
+    const el = document.getElementById('accountEmail');
+    const btn = document.getElementById('logoutBtn');
+    if(!el) return;
+    if(currentUser && currentUser.email){
+      el.textContent = currentUser.email;
+      if(btn) btn.classList.remove('hidden');
+    } else {
+      el.textContent = sb ? 'Offline mode — not signed in' : 'Local only on this device';
+      if(btn) btn.classList.toggle('hidden', !sb);
+    }
+  }
+
   function updateApiKeyStatus(){
     const provider = settings.provider || 'gemini';
     document.querySelectorAll('#providerToggle button').forEach(b=>{
@@ -824,17 +1098,22 @@
       if(label) label.textContent = 'Anthropic API key';
       if(input) input.placeholder = 'sk-ant-...';
     } else {
-      if(help) help.innerHTML = "Free — 1,500 scans a day, no credit card needed. Get a key at aistudio.google.com/apikey (sign in with Google, click Create API key).";
+      if(help) help.innerHTML = "Optional. Scanning already works through the app's own server when you're signed in. Add a personal key only if you want your own quota — free at aistudio.google.com/apikey.";
       if(label) label.textContent = 'Google AI Studio API key';
       if(input) input.placeholder = 'AIza...';
     }
     const el = document.getElementById('apiKeyStatus');
     if(!el) return;
     if(settings.apiKey && settings.apiKey.trim()){
-      el.textContent = 'Key saved on this device. Scanning is enabled.';
+      el.textContent = 'Using your personal key.';
+      el.style.color = 'var(--text-dim)';
+    } else if(sb && currentUser){
+      el.textContent = lastScanQuota
+        ? 'Using the app\'s shared scanning. ' + lastScanQuota
+        : "Using the app's shared scanning — no key needed.";
       el.style.color = 'var(--text-dim)';
     } else {
-      el.textContent = 'No key set — scanning is disabled. Manual logging still works.';
+      el.textContent = 'Sign in, or add a key, to enable scanning.';
       el.style.color = 'var(--red)';
     }
   }
@@ -1438,13 +1717,56 @@
   async function callClaude(messages, system, maxTokens, opts){
     const provider = settings.provider || 'gemini';
     const apiKey = (settings.apiKey || '').trim();
+
+    // Preferred path: the server-side proxy, so nobody needs their own key.
+    // Falls back to a personal key if the user set one or the proxy isn't available.
+    if(!apiKey && sb && currentUser){
+      return callScanProxy(messages, system, maxTokens, opts || {});
+    }
     if(!apiKey){
-      throw new Error('No API key set. Open Settings and add a free Google AI key to enable scanning.');
+      throw new Error('Scanning needs you to be signed in, or add your own API key in Settings.');
     }
     return provider === 'anthropic'
       ? callAnthropic(messages, system, maxTokens, apiKey)
       : callGemini(messages, system, maxTokens, apiKey, opts || {});
   }
+
+  // Calls our Supabase Edge Function, which holds the API key server-side.
+  async function callScanProxy(messages, system, maxTokens, opts){
+    let token = '';
+    try{
+      const { data } = await sb.auth.getSession();
+      token = (data && data.session && data.session.access_token) || '';
+    }catch(e){}
+    if(!token) throw new Error('Session expired — log in again.');
+
+    let res;
+    try{
+      res = await fetch(SUPABASE_URL + '/functions/v1/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          contents: toGeminiContents(messages),
+          system: system || '',
+          maxTokens: maxTokens || 1200,
+          json: !!opts.json
+        })
+      });
+    }catch(netErr){
+      throw new Error("Couldn't reach the server — check your connection.");
+    }
+
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok || data.error){
+      throw new Error(data.error || ('Scan failed (' + res.status + ')'));
+    }
+    if(typeof data.used === 'number' && typeof data.limit === 'number'){
+      lastScanQuota = data.used + ' / ' + data.limit + ' scans used today';
+    }
+    return data.text || '';
+  }
+
+  let lastScanQuota = '';
 
   // Convert our Anthropic-shaped messages into Gemini's format
   function toGeminiContents(messages){
@@ -2072,8 +2394,8 @@ If — and only if — the user describes a specific meal or food they ate or wa
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
     if(!text) return;
-    if(!settings.apiKey || !settings.apiKey.trim()){
-      showToast('Add a free Google AI key in Settings to use the coach.');
+    if(!(settings.apiKey && settings.apiKey.trim()) && !(sb && currentUser)){
+      showToast('Sign in to use the coach, or add your own API key in Settings.');
       openSettings();
       return;
     }
@@ -2184,6 +2506,7 @@ If — and only if — the user describes a specific meal or food they ate or wa
     document.getElementById('autoLogSwitch').classList.toggle('on', !!settings.autoLog);
     document.getElementById('apiKeyInput').value = settings.apiKey || '';
     updateApiKeyStatus();
+    updateAccountDisplay();
     updatePlanDisplay();
     if(profile){
       const wUnit = profile.units==='imperial' ? 'lb' : 'kg';
@@ -2226,6 +2549,11 @@ If — and only if — the user describes a specific meal or food they ate or wa
   });
 
   // Diagnostic: tiny text-only request that reports exactly what happens.
+  document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+    if(!currentUser){ document.getElementById('settingsModal').classList.add('hidden'); showAuth(); return; }
+    await handleLogout();
+  });
+
   document.getElementById('testConnBtn').addEventListener('click', async ()=>{
     const out = document.getElementById('testConnResult');
     const key = document.getElementById('apiKeyInput').value.trim();
@@ -2291,6 +2619,67 @@ If — and only if — the user describes a specific meal or food they ate or wa
 
   // override finishOnboarding to handle "edit full profile" re-entry (skip straight back to main if already onboarded)
   const originalFinish = finishOnboarding;
+
+  // ---- auth button wiring ----
+  (function wireAuth(){
+    const sub = document.getElementById('authSubmitBtn');
+    if(!sub) return;
+    sub.addEventListener('click', handleAuthSubmit);
+    document.getElementById('authPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') handleAuthSubmit(); });
+    document.getElementById('authEmail').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('authPassword').focus(); });
+    document.getElementById('authToggleMode').addEventListener('click', ()=>{
+      authMode = (authMode === 'login') ? 'signup' : 'login';
+      renderAuthMode();
+    });
+    document.getElementById('authForgot').addEventListener('click', async ()=>{
+      const email = document.getElementById('authEmail').value.trim();
+      if(!email){ authError('Enter your email first, then tap this again.'); return; }
+      if(!sb) return;
+      try{
+        const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.href });
+        if(error) throw error;
+        authError('');
+        showToast('Password reset link sent — check your email.');
+      }catch(e){ authError((e && e.message) || 'Could not send reset email.'); }
+    });
+    document.getElementById('authOffline').addEventListener('click', async ()=>{
+      // local-only mode: skip the cloud entirely for this device
+      currentUser = null;
+      document.getElementById('authView').classList.add('hidden');
+      try{ const r=await store.get('profile'); if(r&&r.value) profile=JSON.parse(r.value); }catch(e){}
+      try{ const r=await store.get('targets'); if(r&&r.value) targets=JSON.parse(r.value); }catch(e){}
+      try{ const r=await store.get('settings'); if(r&&r.value) settings={...settings, ...JSON.parse(r.value)}; }catch(e){}
+      await loadCorrections();
+      await loadDay(currentDate);
+      if(profile && profile.onboarded){
+        document.getElementById('mainApp').classList.remove('hidden');
+        mainInited = false; initMainApp();
+      } else {
+        document.getElementById('onboardingView').classList.remove('hidden');
+        renderOnboardingStep();
+      }
+    });
+  })();
+
+  // Re-sync when the app is reopened or brought back to the foreground, so a meal
+  // logged on your phone shows up on your laptop without a manual refresh.
+  let lastPull = Date.now();
+  document.addEventListener('visibilitychange', async ()=>{
+    if(document.visibilityState !== 'visible') return;
+    if(!sb || !currentUser) return;
+    if(Date.now() - lastPull < 10000) return; // don't hammer it
+    lastPull = Date.now();
+    const ok = await pullFromCloud();
+    if(ok){
+      try{ const r=await store.get('profile'); if(r&&r.value) profile=JSON.parse(r.value); }catch(e){}
+      try{ const r=await store.get('targets'); if(r&&r.value) targets=JSON.parse(r.value); }catch(e){}
+      await loadDay(currentDate);
+      if(mainInited) render();
+    }
+  });
+
+  // make sure pending writes land before the app is closed
+  window.addEventListener('pagehide', ()=>{ try{ flushPushQueue(); }catch(e){} });
 
   // ================= INIT =================
   loadAll();
