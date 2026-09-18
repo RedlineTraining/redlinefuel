@@ -1,6 +1,6 @@
 {
-  "name": "Redline — Nutrition Tracker",
-  "short_name": "Redline",
+  "name": "Redline Fuel \u2014 Nutrition Tracker",
+  "short_name": "Redline Fuel",
   "description": "AI-powered calorie and macro tracking. Snap a photo, get your numbers.",
   "start_url": "./index.html",
   "scope": "./",
@@ -8,7 +8,11 @@
   "orientation": "portrait",
   "background_color": "#0A0A0B",
   "theme_color": "#0A0A0B",
-  "categories": ["health", "fitness", "lifestyle"],
+  "categories": [
+    "health",
+    "fitness",
+    "lifestyle"
+  ],
   "icons": [
     {
       "src": "icons/icon-192.png",
