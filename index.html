@@ -15,23 +15,38 @@
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0A0A0B;
-    --bg-elev:#151515;
-    --bg-elev-2:#1D1D1E;
-    --hairline:rgba(255,255,255,0.09);
-    --hairline-strong:rgba(255,255,255,0.18);
-    --text:#FFFFFF;
-    --text-dim:#A6A6A6;
-    --text-faint:#5C5C5C;
+    /* instrument panel: near-black with a cold cast, one hot accent */
+    --bg:#08090A;
+    --bg-elev:#111214;
+    --bg-elev-2:#181A1D;
+    --bg-sunken:#050506;
+    --hairline:rgba(255,255,255,0.065);
+    --hairline-strong:rgba(255,255,255,0.14);
+    --text:#F5F4F2;
+    --text-dim:#8C9094;
+    --text-faint:#7E8388;
     --red:#E8302A;
-    --red-dim:rgba(232,48,42,0.20);
-    --red-soft:rgba(232,48,42,0.10);
-    --grey-light:#D6D6D3;
-    --grey-mid:#8A8A88;
+    --red-hot:#FF4438;
+    --red-deep:#C72019;
+    --red-dim:rgba(232,48,42,0.22);
+    --red-soft:rgba(232,48,42,0.08);
+    --red-glow:rgba(232,48,42,0.28);
+    --steel:#5A646D;
+    --grey-light:#C9CCCF;
+    --grey-mid:#7C848B;
+
+    /* radii carry hierarchy: containers > controls > chips */
+    --r-sheet:20px;
+    --r-panel:12px;
+    --r-control:9px;
+    --r-chip:6px;
+
+    --ease:cubic-bezier(.2,.8,.2,1);
   }
+
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
@@ -41,7 +56,7 @@
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
   }
-  .serif{font-family:'Fraunces',serif;}
+  .serif{font-family:'Barlow Condensed',sans-serif; letter-spacing:0.01em;}
   .app{max-width:460px; margin:0 auto; min-height:100vh; position:relative; padding-top:env(safe-area-inset-top);}
   .screen{padding:22px 20px 90px;}
   .hidden{display:none !important;}
@@ -60,7 +75,7 @@
   .ob-field label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:7px;}
   .ob-field input{
     width:100%; background:none; border:none; border-bottom:1px solid var(--hairline-strong);
-    color:var(--text); font-size:20px; padding:8px 0; font-family:'Fraunces',serif; font-weight:500;
+    color:var(--text); font-size:20px; padding:8px 0; font-family:'Barlow Condensed',sans-serif; font-weight:500;
   }
   .ob-field input:focus{outline:none; border-bottom-color:var(--red);}
   .ob-row{display:flex; gap:14px;}
@@ -164,7 +179,10 @@
   .today-title{font-size:13px; color:var(--text-dim); margin-bottom:10px;}
   .meal-row{display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px solid var(--hairline);}
   .meal-row .name{font-size:14px; font-weight:500;}
-  .meal-row .meta{font-size:11px; color:var(--text-dim); margin-top:2px;}
+  .meal-row .meta{
+    font-size:11px; color:var(--text-dim); margin-top:3px;
+    display:flex; gap:12px; font-variant-numeric:tabular-nums;
+  }
   .meal-row .kcal{font-size:15px; font-weight:600; margin-right:12px;}
   .meal-row .row-right{display:flex; align-items:center;}
   .meal-del{background:none; border:none; color:var(--text-faint); font-size:15px; cursor:pointer; padding:4px 4px;}
@@ -206,7 +224,7 @@
   .result-block{margin-top:18px;}
   .result-name-row{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:4px;}
   .result-name-input{
-    font-family:'Fraunces',serif; font-size:20px; font-weight:500; background:none; border:none;
+    font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:500; background:none; border:none;
     color:var(--text); width:100%; padding:0;
   }
   .result-name-input:focus{outline:none;}
@@ -222,7 +240,7 @@
   .ingredient-row .ing-cal{color:var(--text-dim);}
 
   .totals-row{display:flex; justify-content:space-between; align-items:baseline; padding:12px 0 4px; border-top:1px solid var(--hairline-strong);}
-  .totals-row .t-kcal{font-family:'Fraunces',serif; font-size:24px; font-weight:500;}
+  .totals-row .t-kcal{font-family:'Barlow Condensed',sans-serif; font-size:24px; font-weight:500;}
   .totals-row .t-macros{font-size:11.5px; color:var(--text-dim);}
 
   .edit-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0;}
@@ -283,7 +301,7 @@
   .widget-pair{display:flex; gap:12px;}
   .widget-mini{flex:1; background:var(--bg-elev); border:1px solid var(--hairline); border-radius:14px; padding:14px; text-align:center;}
   .widget-mini .wm-icon{font-size:16px; margin-bottom:6px; opacity:0.85;}
-  .widget-mini .wm-val{font-family:'Fraunces',serif; font-size:19px; font-weight:500;}
+  .widget-mini .wm-val{font-family:'Barlow Condensed',sans-serif; font-size:19px; font-weight:500;}
   .widget-mini .wm-lbl{font-size:10px; color:var(--text-dim); margin-top:2px;}
   .wm-stepper{display:flex; align-items:center; justify-content:center; gap:10px; margin-top:8px;}
   .wm-stepper button{width:22px; height:22px; border-radius:50%; border:1px solid var(--hairline); background:var(--bg); color:var(--text); font-size:13px; cursor:pointer; line-height:1;}
@@ -317,6 +335,288 @@
     max-width:88%; text-align:center;
   }
   .toast.show{opacity:1;}
+
+  /* ---------------- TRAINING ---------------- */
+  .t-header{
+    display:flex; align-items:center; gap:10px; margin-bottom:18px;
+  }
+  .t-back{
+    width:36px; height:36px; flex-shrink:0; border-radius:10px;
+    background:var(--bg-elev); border:1px solid var(--hairline); color:var(--text);
+    font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    line-height:1; padding:0;
+  }
+  .t-back:active{background:var(--bg-elev-2);}
+  .t-header-text{min-width:0; flex:1;}
+  .t-header-text .t-title{font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:500; line-height:1.2;}
+  .t-header-text .t-sub{font-size:11.5px; color:var(--text-dim); margin-top:3px; line-height:1.4;}
+
+  .t-progress-bar{height:3px; background:var(--hairline); border-radius:3px; overflow:hidden; margin-bottom:20px;}
+  .t-progress-fill{height:100%; background:var(--red); border-radius:3px; transition:width .3s ease;}
+
+  .t-daycard{
+    background:var(--bg-elev); border:1px solid var(--hairline); border-radius:14px;
+    padding:15px 16px; cursor:pointer; display:flex; align-items:center; gap:12px;
+  }
+  .t-daycard:active{background:var(--bg-elev-2);}
+  .t-daycard.done{opacity:0.55;}
+  .t-daynum{
+    width:34px; height:34px; flex-shrink:0; border-radius:50%;
+    border:1px solid var(--hairline-strong); display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:700; color:var(--text-dim);
+  }
+  .t-daycard.done .t-daynum{background:var(--red); border-color:var(--red); color:#fff;}
+  .t-daybody{flex:1; min-width:0;}
+  .t-dayname{font-size:15px; font-weight:600; line-height:1.3;}
+  .t-daymeta{font-size:11.5px; color:var(--text-dim); margin-top:3px; line-height:1.4;}
+  .t-chev{color:var(--text-faint); font-size:20px; flex-shrink:0;}
+
+  .t-exercise{
+    background:var(--bg-elev); border:1px solid var(--hairline); border-radius:14px;
+    padding:15px 14px 13px; margin-bottom:12px;
+  }
+  .t-ex-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;}
+  .t-ex-name{font-size:15px; font-weight:600; line-height:1.3; min-width:0;}
+  .t-ex-count{
+    font-size:10.5px; color:var(--text-dim); background:var(--bg); border:1px solid var(--hairline);
+    border-radius:20px; padding:3px 9px; white-space:nowrap; flex-shrink:0;
+  }
+  .t-ex-count.complete{color:var(--red); border-color:var(--red-dim); background:var(--red-soft);}
+
+  .t-prescription{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+  .t-tag{
+    font-size:10.5px; color:var(--text-dim); background:var(--bg);
+    border:1px solid var(--hairline); border-radius:6px; padding:3px 7px; white-space:nowrap;
+  }
+  .t-tag b{color:var(--text); font-weight:600;}
+  .t-ex-notes{
+    font-size:11.5px; color:var(--text-faint); line-height:1.5; margin-bottom:12px;
+    padding-left:9px; border-left:2px solid var(--hairline);
+  }
+
+  /* set table — fixed grid so nothing overflows on narrow screens */
+  .t-setgrid{display:flex; flex-direction:column; gap:6px;}
+  .t-setrow{
+    display:grid; grid-template-columns:22px 1fr 1fr 52px 30px;
+    gap:6px; align-items:center;
+  }
+  .t-sethead{
+    display:grid; grid-template-columns:22px 1fr 1fr 52px 30px; gap:6px;
+    font-size:9.5px; color:var(--text-faint); font-weight:600; letter-spacing:0.4px;
+    padding:0 0 2px;
+  }
+  .t-sethead span{text-align:center;}
+  .t-sethead span:first-child{text-align:center;}
+  .t-setnum{
+    font-size:11px; color:var(--text-faint); font-weight:600; text-align:center;
+  }
+  .t-setrow.filled .t-setnum{color:var(--red);}
+  .t-setinput{
+    width:100%; min-width:0; background:var(--bg); border:1px solid var(--hairline);
+    color:var(--text); padding:9px 4px; border-radius:9px; font-size:14px; font-weight:600;
+    font-family:'Inter',sans-serif; text-align:center; -moz-appearance:textfield;
+  }
+  .t-setinput::-webkit-outer-spin-button,
+  .t-setinput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .t-setinput:focus{outline:none; border-color:var(--red);}
+  .t-setinput::placeholder{color:var(--text-faint); font-weight:400;}
+  .t-setdel{
+    width:30px; height:34px; background:none; border:none; color:var(--text-faint);
+    font-size:15px; cursor:pointer; padding:0; border-radius:8px; line-height:1;
+  }
+  .t-setdel:active{color:var(--red); background:var(--red-soft);}
+  .t-lastweek{
+    font-size:11px; color:var(--text-dim); margin-top:10px; padding-top:9px;
+    border-top:1px solid var(--hairline); display:flex; gap:7px; align-items:baseline;
+  }
+  .t-lastweek b{ color:var(--text-faint); font-weight:500; flex-shrink:0; }
+  .t-lastweek span{ font-variant-numeric:tabular-nums; letter-spacing:0.01em; }
+  .t-addset{
+    width:100%; margin-top:10px; background:var(--bg); border:1px dashed var(--hairline-strong);
+    color:var(--text-dim); border-radius:9px; padding:9px; font-size:12px; font-weight:600;
+    cursor:pointer; font-family:'Inter',sans-serif;
+  }
+  .t-addset:active{border-color:var(--red); color:var(--text);}
+
+  .t-conditioning{
+    background:var(--bg-elev); border:1px solid var(--hairline);
+    border-left:2px solid var(--red); border-radius:var(--r-panel);
+    padding:14px 15px; margin-bottom:12px;
+  }
+  .t-cond-label{font-size:12px; font-weight:600; color:var(--text); margin-bottom:5px;}
+  .t-cond-body{font-size:12.5px; color:var(--text-dim); line-height:1.55;}
+
+  .t-sticky-footer{
+    position:sticky; bottom:62px; padding:12px 0 4px;
+    background:linear-gradient(to top, var(--bg) 70%, transparent);
+  }
+  .t-coachnote{
+    display:flex; gap:10px; padding:13px 14px; background:var(--bg-elev);
+    border:1px solid var(--hairline); border-left:2px solid var(--red); border-radius:10px;
+    font-size:12.5px; color:var(--text-dim); line-height:1.55; margin-bottom:18px;
+  }
+  .t-section-label{
+    font-size:10.5px; font-weight:700; color:var(--text-faint); letter-spacing:0.5px;
+    margin:22px 0 10px;
+  }
+
+
+  /* ============ INSTRUMENT LAYER ============
+     Data reads like a readout: tabular figures, measured rules, one hot accent. */
+
+  body{ font-feature-settings:"cv05","ss01"; }
+  .num, .t-setinput, .macro-row .m-val, .cal-readout .num, .t-tag b,
+  .t-ex-count, .t-setnum, .widget-mini .wm-val, .adherence-row .a-val,
+  .meal-row .kcal, input[type=number]{
+    font-variant-numeric:tabular-nums; font-feature-settings:"tnum";
+  }
+
+  /* ---- display type ---- */
+  .serif{ font-weight:600; }
+  .cal-readout .num{ font-size:52px; letter-spacing:-0.01em; line-height:0.95; }
+  .ob-title{ font-size:29px; line-height:1.1; letter-spacing:0.005em; }
+  .t-header-text .t-title{ font-size:23px; letter-spacing:0.01em; }
+
+  /* ---- buttons: firm, immediate, physical ---- */
+  .ob-btn, .sheet-btn, .btn, .chat-send, .t-addset, .t-back,
+  .icon-btn, .weight-log-row button, .log-suggest-btn{
+    transition: transform .09s var(--ease), background-color .15s ease,
+                border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  .ob-btn:active, .sheet-btn:active, .btn:active, .chat-send:active,
+  .t-addset:active, .t-back:active, .icon-btn:active,
+  .weight-log-row button:active, .log-suggest-btn:active{
+    transform:scale(0.975);
+  }
+
+  .ob-btn-primary, .sheet-btn-primary, .btn-primary{
+    background:linear-gradient(180deg, var(--red) 0%, var(--red-deep) 100%);
+    color:#fff; border:none;
+    box-shadow:0 1px 0 rgba(255,255,255,0.14) inset, 0 6px 18px -8px var(--red-glow);
+    letter-spacing:0.01em;
+  }
+  .ob-btn-primary:active, .sheet-btn-primary:active, .btn-primary:active{
+    background:var(--red-deep);
+    box-shadow:0 1px 0 rgba(255,255,255,0.08) inset, 0 2px 8px -6px var(--red-glow);
+  }
+  .ob-btn-primary:disabled{ opacity:.35; box-shadow:none; }
+
+  .ob-btn-ghost, .sheet-btn-ghost, .btn-ghost{
+    background:var(--bg-elev); color:var(--text-dim);
+    border:1px solid var(--hairline-strong);
+  }
+  .ob-btn-ghost:active, .sheet-btn-ghost:active, .btn-ghost:active{
+    background:var(--bg-elev-2); color:var(--text);
+  }
+
+  .sheet-btn, .ob-btn{ border-radius:var(--r-control); font-weight:600; }
+
+  /* keyboard access — a quality floor, not decoration */
+  button:focus-visible, input:focus-visible, .ob-choice:focus-visible, .fav-chip:focus-visible{
+    outline:2px solid var(--red); outline-offset:2px;
+  }
+
+  /* ---- inputs: legible figures, unmistakable focus ---- */
+  .ob-field input, .field input, .settings-field-row input,
+  .chat-input-row input, .describe-box textarea, .weight-log-row input,
+  .t-setinput, .result-field input, .edit-field input{
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+  }
+  .ob-field input:focus, .field input:focus, .settings-field-row input:focus,
+  .chat-input-row input:focus, .describe-box textarea:focus,
+  .weight-log-row input:focus, .t-setinput:focus{
+    outline:none;
+    border-color:var(--red);
+    box-shadow:0 0 0 3px var(--red-soft);
+    background:var(--bg-sunken);
+  }
+  .ob-field input{
+    font-size:22px; font-weight:600; letter-spacing:-0.005em;
+    font-family:'Barlow Condensed',sans-serif;
+  }
+  .t-setinput{ font-size:15px; height:38px; }
+
+  /* ---- selection controls ---- */
+  .ob-choice{
+    border-radius:var(--r-panel);
+    transition: border-color .15s ease, background-color .15s ease, transform .09s var(--ease);
+  }
+  .ob-choice:active{ transform:scale(0.99); }
+  .ob-choice.selected{
+    border-color:var(--red);
+    background:linear-gradient(180deg, var(--red-soft) 0%, transparent 100%);
+  }
+  .ob-choice .oc-mark{ transition: background-color .15s ease, border-color .15s ease; }
+  .ob-choice.selected .oc-mark{ box-shadow:0 0 0 3px var(--red-soft); }
+  .fav-chip{ border-radius:var(--r-chip); transition:all .15s ease; }
+
+  /* ---- surfaces: radius encodes hierarchy ---- */
+  .progress-card, .t-exercise, .t-daycard, .widget-mini, .macro-card{ border-radius:var(--r-panel); }
+  .modal, .sheet{ border-radius:var(--r-sheet) var(--r-sheet) 0 0; }
+  .t-tag, .confidence-pill, .src-tag{ border-radius:var(--r-chip); }
+
+  /* ---- tab bar: a lit indicator, like a gauge needle ---- */
+  .tab-btn{ position:relative; transition:color .18s ease; }
+  .tab-btn::before{
+    content:''; position:absolute; top:0; left:50%; transform:translateX(-50%) scaleX(0);
+    width:26px; height:2px; background:var(--red); border-radius:0 0 2px 2px;
+    transition:transform .22s var(--ease);
+  }
+  .tab-btn.active::before{ transform:translateX(-50%) scaleX(1); }
+  .tab-btn.active .t-icon{ filter:drop-shadow(0 0 6px var(--red-glow)); }
+
+  /* ---- progress fills read as instrument sweeps ---- */
+  .t-progress-fill, .bar-fill, .m-fill{
+    background:linear-gradient(90deg, var(--red) 0%, var(--red-hot) 100%);
+    box-shadow:0 0 10px -2px var(--red-glow);
+  }
+  .t-progress-bar{ background:var(--bg-sunken); border:1px solid var(--hairline); height:4px; }
+
+  /* ---- section labels: sentence case, weight not caps ---- */
+  .t-section-label{
+    font-size:12px; font-weight:600; letter-spacing:0; text-transform:none;
+    color:var(--text-dim); margin:26px 0 11px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .t-section-label::after{
+    content:''; flex:1; height:1px; background:var(--hairline);
+  }
+  .t-cond-label{ text-transform:none; letter-spacing:0; font-size:12px; }
+  .modal-sub{ text-transform:none; letter-spacing:0; font-size:12px; font-weight:600; color:var(--text-dim); }
+
+  /* ---- day markers: these ARE a sequence, so numbering is earned ---- */
+  .t-daynum{ font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:700; }
+  .t-daycard{ transition:transform .09s var(--ease), background-color .15s ease, border-color .15s ease; }
+  .t-daycard:active{ transform:scale(0.99); background:var(--bg-elev-2); }
+  .t-daycard.done .t-daynum{ box-shadow:0 0 12px -4px var(--red-glow); }
+
+  /* ---- one orchestrated entrance, on screen change only ---- */
+  @keyframes screenIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+  .screen:not(.hidden){ animation:screenIn .26s var(--ease) both; }
+
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration:.01ms !important; animation-iteration-count:1 !important;
+      transition-duration:.01ms !important;
+    }
+    .screen:not(.hidden){ animation:none; }
+  }
+
+  /* ---- spacing rhythm ---- */
+  .screen{ padding:20px 18px 96px; }
+  .t-exercise{ padding:16px 15px 14px; margin-bottom:11px; }
+  .t-header{ margin-bottom:16px; }
+  .macro-row{ padding:11px 0; }
+
+  /* ---- toast: a readout, not a bubble ---- */
+  .toast{
+    background:var(--bg-elev-2); border:1px solid var(--hairline-strong);
+    border-left:3px solid var(--red); border-radius:var(--r-control);
+    box-shadow:0 12px 32px -12px rgba(0,0,0,.8);
+  }
+
   ::-webkit-scrollbar{height:0px; width:0px;}
 </style>
 </head>
@@ -697,7 +997,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -1647,14 +1947,14 @@
   function renderMealList(){
     const list = document.getElementById('mealList');
     if(entries.length===0){
-      list.innerHTML = '<div class="empty-note">Nothing logged yet — tap "Add a meal" to snap your first photo.</div>';
+      list.innerHTML = '<div class="empty-note">No meals yet today. Tap Add a meal to log your first.</div>';
       return;
     }
     list.innerHTML = entries.slice().reverse().map(e=>`
       <div class="meal-row" data-id="${e.id}">
         <div>
           <div class="name">${escapeHtml(e.name)}</div>
-          <div class="meta">P ${Math.round(e.protein||0)}g · C ${Math.round(e.carbs||0)}g · F ${Math.round(e.fat||0)}g${e.weight_g?' · ~'+Math.round(e.weight_g)+'g':''}</div>
+          <div class="meta"><span>P ${Math.round(e.protein||0)}g</span><span>C ${Math.round(e.carbs||0)}g</span><span>F ${Math.round(e.fat||0)}g</span>${e.weight_g?`<span>~${Math.round(e.weight_g)}g</span>`:''}</div>
         </div>
         <div class="row-right"><div class="kcal">${Math.round(e.calories)}</div><button class="meal-del" data-del="${e.id}">✕</button></div>
       </div>
@@ -2912,8 +3212,14 @@ If — and only if — the user describes a specific meal or food they ate or wa
         </div>`;
     }
 
-    body.innerHTML = `<div class="ob-dots" style="margin-bottom:20px;">${dots}</div>
-      <div style="font-size:11px; color:var(--text-faint); margin-bottom:12px;">Step ${tqStep+1} of ${TQ_STEPS.length}</div>
+    body.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+        ${tqStep>0?'<button class="t-back" id="tqBackArrow" aria-label="Back">‹</button>':'<button class="t-back" id="tqExit" aria-label="Exit">✕</button>'}
+        <div style="flex:1;">
+          <div class="ob-dots" style="margin-bottom:6px;">${dots}</div>
+          <div style="font-size:10.5px; color:var(--text-faint);">Step ${tqStep+1} of ${TQ_STEPS.length}</div>
+        </div>
+      </div>
       ${inner}
       <div class="ob-actions" style="margin-top:22px;">
         ${tqStep>0?'<button class="ob-btn ob-btn-ghost" id="tqBack">Back</button>':''}
@@ -2944,6 +3250,10 @@ If — and only if — the user describes a specific meal or food they ate or wa
 
     const back = document.getElementById('tqBack');
     if(back) back.addEventListener('click', ()=>{ captureTQ(); tqStep--; renderTrainQuestion(); });
+    const backArrow = document.getElementById('tqBackArrow');
+    if(backArrow) backArrow.addEventListener('click', ()=>{ captureTQ(); tqStep--; renderTrainQuestion(); });
+    const exit = document.getElementById('tqExit');
+    if(exit) exit.addEventListener('click', ()=>{ if(confirm('Leave setup? Your answers so far will be lost.')) renderTrain(); });
     const skip = document.getElementById('tqSkip');
     if(skip) skip.addEventListener('click', ()=>{ captureTQ(); advanceTQ(); });
 
@@ -3183,43 +3493,52 @@ Write week 1 of their training. Start conservatively enough that there is room t
   function renderWeek(body){
     const plan = trainingPlan;
     const wk = plan.weekNumber;
-    const doneCount = (plan.days||[]).filter((_,i)=>(trainingLogs[`w${wk}:${i}`]||{}).done).length;
+    const total = plan.days.length;
+    const doneCount = plan.days.filter((_,i)=>(trainingLogs[`w${wk}:${i}`]||{}).done).length;
+    const pct = total ? Math.round((doneCount/total)*100) : 0;
 
     body.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
-        <div class="serif" style="font-size:22px; font-weight:500;">Week ${wk}</div>
-        <div style="font-size:12px; color:var(--text-dim);">${doneCount}/${plan.days.length} done</div>
+      <div class="t-header">
+        <div class="t-header-text">
+          <div class="t-title">Week ${wk}</div>
+          <div class="t-sub">${escapeHtml(plan.split||'')}${plan.focus?'. '+escapeHtml(plan.focus):''}</div>
+        </div>
+        <div style="font-size:12px; color:var(--text-dim); white-space:nowrap;">${doneCount}/${total}</div>
       </div>
-      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:14px;">${escapeHtml(plan.split||'')} — ${escapeHtml(plan.focus||'')}</div>
 
-      ${plan.coachNote ? `<div class="insight-line" style="margin-bottom:16px;"><span class="i-dot"></span><span>${escapeHtml(plan.coachNote)}</span></div>` : ''}
+      <div class="t-progress-bar"><div class="t-progress-fill" style="width:${pct}%"></div></div>
 
-      <div style="display:flex; flex-direction:column; gap:10px;">
+      ${plan.coachNote ? `<div class="t-coachnote"><span>${escapeHtml(plan.coachNote)}</span></div>` : ''}
+
+      <div class="t-section-label">Sessions</div>
+      <div style="display:flex; flex-direction:column; gap:9px;">
         ${plan.days.map((day,i)=>{
           const log = trainingLogs[`w${wk}:${i}`]||{};
           const done = !!log.done;
-          return `<div class="progress-card" data-day="${i}" style="cursor:pointer; ${done?'opacity:0.6;':''}">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div>
-                <div style="font-size:15px; font-weight:600;">${escapeHtml(day.name)} ${done?'<span style="color:var(--red);">✓</span>':''}</div>
-                <div style="font-size:11.5px; color:var(--text-dim); margin-top:3px;">${escapeHtml(day.focus||'')} · ${(day.exercises||[]).length} exercises</div>
-              </div>
-              <div style="color:var(--text-faint); font-size:18px;">›</div>
+          const exCount = (day.exercises||[]).length;
+          const logged = Object.keys(log.exercises||{}).filter(k=>(log.exercises[k]||[]).some(st=>st.r)).length;
+          return `<div class="t-daycard ${done?'done':''}" data-day="${i}">
+            <div class="t-daynum">${done?'✓':(i+1)}</div>
+            <div class="t-daybody">
+              <div class="t-dayname">${escapeHtml(day.name)}</div>
+              <div class="t-daymeta">${escapeHtml(day.focus||'')}, ${exCount} exercises${(!done&&logged)?`, ${logged} started`:''}</div>
             </div>
+            <div class="t-chev">›</div>
           </div>`;
         }).join('')}
       </div>
 
-      <div style="margin-top:20px; display:flex; gap:8px;">
+      <div class="t-section-label">Week controls</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        ${doneCount===total ? '<button class="sheet-btn sheet-btn-primary" id="nextWeekBtn">Build week '+(wk+1)+'</button>' : ''}
         <button class="sheet-btn sheet-btn-ghost" id="regenWeek">Rebuild this week</button>
-        ${doneCount===plan.days.length ? '<button class="sheet-btn sheet-btn-primary" id="nextWeekBtn">Get next week</button>' : ''}
       </div>`;
 
     body.querySelectorAll('[data-day]').forEach(el=>{
       el.addEventListener('click', ()=>openSession(Number(el.getAttribute('data-day'))));
     });
     document.getElementById('regenWeek').addEventListener('click', async ()=>{
-      if(!confirm('Rebuild this week from scratch? Your logged sets for the week stay saved.')) return;
+      if(!confirm('Rebuild this week from scratch? Sets you have logged stay saved.')) return;
       trainingPlan = null; await saveTraining();
       renderGenerating(body, false);
     });
@@ -3228,6 +3547,27 @@ Write week 1 of their training. Start conservatively enough that there is room t
   }
 
   // ---------- session / logging ----------
+  function lastUsedWeight(arr){
+    for(let i=arr.length-1; i>=0; i--){
+      if(arr[i] && arr[i].w !== '' && arr[i].w !== undefined && arr[i].w !== null) return arr[i].w;
+    }
+    return '';
+  }
+
+  function prevWeekSets(exName){
+    if(!trainingPlan) return '';
+    const prevWk = trainingPlan.weekNumber - 1;
+    if(prevWk < 1) return '';
+    for(let di=0; di<8; di++){
+      const log = trainingLogs[`w${prevWk}:${di}`];
+      if(log && log.exercises && log.exercises[exName]){
+        const sets = log.exercises[exName].filter(st=>st.r);
+        if(sets.length) return sets.map(st=>`${st.w||'-'}×${st.r}`).join(' / ');
+      }
+    }
+    return '';
+  }
+
   function openSession(dayIndex){
     const plan = trainingPlan, wk = plan.weekNumber;
     const day = plan.days[dayIndex];
@@ -3236,51 +3576,100 @@ Write week 1 of their training. Start conservatively enough that there is room t
     trainingLogs[key] = log;
     const body = document.getElementById('trainBody');
 
-    body.innerHTML = `
-      <button class="edit-toggle-link" id="backToWeek" style="margin-bottom:14px;">‹ Back to week ${wk}</button>
-      <div class="serif" style="font-size:22px; font-weight:500;">${escapeHtml(day.name)}</div>
-      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:16px;">${escapeHtml(day.focus||'')}</div>
+    // make sure every exercise has at least its prescribed number of rows
+    (day.exercises||[]).forEach(ex=>{
+      if(!log.exercises[ex.name]) log.exercises[ex.name] = [];
+      while(log.exercises[ex.name].length < ex.sets){
+        const arr = log.exercises[ex.name];
+        arr.push({ w: lastUsedWeight(arr), r:'', rir:'' });
+      }
+    });
 
-      <div style="display:flex; flex-direction:column; gap:12px;">
-        ${(day.exercises||[]).map((ex,ei)=>{
-          const sets = log.exercises[ex.name] || [];
-          return `<div class="progress-card">
-            <div style="display:flex; justify-content:space-between; align-items:baseline;">
-              <div style="font-size:15px; font-weight:600;">${escapeHtml(ex.name)}</div>
-              <div style="font-size:11px; color:var(--text-faint);">${ex.restSeconds||90}s rest</div>
-            </div>
-            <div style="font-size:12px; color:var(--text-dim); margin:6px 0 4px;">
-              ${ex.sets} × ${ex.repsLow}-${ex.repsHigh} · ${ex.rir} RIR · tempo ${escapeHtml(ex.tempo||'1-1-1-1')}
-            </div>
-            ${ex.notes?`<div style="font-size:11.5px; color:var(--text-faint); line-height:1.5; margin-bottom:8px;">${escapeHtml(ex.notes)}</div>`:''}
-            <div id="sets-${ei}" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
-              ${sets.map((s,si)=>setRow(ei,si,s)).join('')}
-            </div>
-            <button class="edit-toggle-link" data-addset="${ei}" style="margin-top:8px;">+ Add set</button>
-          </div>`;
-        }).join('')}
+    const totalSets = (day.exercises||[]).reduce((n,ex)=>n+(log.exercises[ex.name]||[]).length,0);
+    const doneSets  = (day.exercises||[]).reduce((n,ex)=>n+(log.exercises[ex.name]||[]).filter(st=>st.r).length,0);
+    const pct = totalSets ? Math.round((doneSets/totalSets)*100) : 0;
+
+    body.innerHTML = `
+      <div class="t-header">
+        <button class="t-back" id="backToWeek" aria-label="Back to week">‹</button>
+        <div class="t-header-text">
+          <div class="t-title">${escapeHtml(day.name)}</div>
+          <div class="t-sub">Week ${wk}, ${escapeHtml(day.focus||'')}</div>
+        </div>
       </div>
 
-      ${day.conditioning ? `<div class="progress-card" style="margin-top:12px;">
-        <div style="font-size:13px; font-weight:600; margin-bottom:4px;">Conditioning</div>
-        <div style="font-size:12.5px; color:var(--text-dim); line-height:1.5;">${escapeHtml(day.conditioning)}</div>
+      <div class="t-progress-bar"><div class="t-progress-fill" style="width:${pct}%"></div></div>
+      <div style="font-size:11px; color:var(--text-faint); margin:-12px 0 18px;">${doneSets} of ${totalSets} sets logged</div>
+
+      ${(day.exercises||[]).map((ex,ei)=>{
+        const sets = log.exercises[ex.name] || [];
+        const filled = sets.filter(st=>st.r).length;
+        const prev = prevWeekSets(ex.name);
+        return `<div class="t-exercise">
+          <div class="t-ex-top">
+            <div class="t-ex-name">${escapeHtml(ex.name)}</div>
+            <div class="t-ex-count ${filled>=ex.sets?'complete':''}">${filled}/${ex.sets}</div>
+          </div>
+
+          <div class="t-prescription">
+            <span class="t-tag"><b>${ex.sets}</b> sets</span>
+            <span class="t-tag"><b>${ex.repsLow}-${ex.repsHigh}</b> reps</span>
+            <span class="t-tag"><b>${ex.rir}</b> RIR</span>
+            <span class="t-tag">tempo <b>${escapeHtml(ex.tempo||'1-1-1-1')}</b></span>
+            <span class="t-tag"><b>${ex.restSeconds||90}s</b> rest</span>
+          </div>
+
+          ${ex.notes?`<div class="t-ex-notes">${escapeHtml(ex.notes)}</div>`:''}
+
+          <div class="t-sethead"><span>Set</span><span>kg</span><span>reps</span><span>RIR</span><span></span></div>
+          <div class="t-setgrid">
+            ${sets.map((st,si)=>`
+              <div class="t-setrow ${st.r?'filled':''}">
+                <div class="t-setnum">${si+1}</div>
+                <input class="t-setinput setinput" data-e="${ei}" data-s="${si}" data-f="w" type="number" inputmode="decimal" placeholder="—" value="${st.w!==''&&st.w!==undefined?st.w:''}">
+                <input class="t-setinput setinput" data-e="${ei}" data-s="${si}" data-f="r" type="number" inputmode="numeric" placeholder="—" value="${st.r!==''&&st.r!==undefined?st.r:''}">
+                <input class="t-setinput setinput" data-e="${ei}" data-s="${si}" data-f="rir" type="number" inputmode="numeric" placeholder="—" value="${st.rir!==''&&st.rir!==undefined?st.rir:''}">
+                <button class="t-setdel" data-delset="${ei}:${si}" aria-label="Delete set">✕</button>
+              </div>`).join('')}
+          </div>
+
+          <button class="t-addset" data-addset="${ei}">+ Add set</button>
+          ${prev?`<div class="t-lastweek"><b>Last week</b><span>${escapeHtml(prev)}</span></div>`:''}
+        </div>`;
+      }).join('')}
+
+      ${day.conditioning ? `<div class="t-conditioning">
+        <div class="t-cond-label">Conditioning</div>
+        <div class="t-cond-body">${escapeHtml(day.conditioning)}</div>
       </div>` : ''}
 
-      <div style="margin-top:18px;">
+      <div class="t-sticky-footer">
         <button class="sheet-btn ${log.done?'sheet-btn-ghost':'sheet-btn-primary'}" id="finishSession" style="width:100%;">
-          ${log.done?'Session complete ✓ — tap to reopen':'Finish session'}
+          ${log.done?'Completed ✓ — tap to reopen':'Finish session'}
         </button>
       </div>`;
 
-    document.getElementById('backToWeek').addEventListener('click', ()=>renderTrain());
+    document.getElementById('backToWeek').addEventListener('click', ()=>{ captureSets(day, log); saveTraining(); renderTrain(); });
 
     body.querySelectorAll('[data-addset]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
+      btn.addEventListener('click', async ()=>{
+        captureSets(day, log);
         const ei = Number(btn.getAttribute('data-addset'));
-        const ex = day.exercises[ei];
-        const arr = log.exercises[ex.name] || (log.exercises[ex.name] = []);
-        const last = arr[arr.length-1];
-        arr.push({ w: last?last.w:'', r:'', rir:'' });
+        const arr = log.exercises[day.exercises[ei].name];
+        arr.push({ w: lastUsedWeight(arr), r:'', rir:'' });
+        await saveTraining();
+        openSession(dayIndex);
+      });
+    });
+
+    body.querySelectorAll('[data-delset]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        captureSets(day, log);
+        const [ei, si] = btn.getAttribute('data-delset').split(':').map(Number);
+        const arr = log.exercises[day.exercises[ei].name];
+        if(arr.length <= 1){ showToast('Keep at least one set — clear the numbers instead.'); return; }
+        arr.splice(si, 1);
+        await saveTraining();
         openSession(dayIndex);
       });
     });
@@ -3300,23 +3689,19 @@ Write week 1 of their training. Start conservatively enough that there is room t
     });
   }
 
-  function setRow(ei, si, s){
-    return `<div style="display:flex; gap:6px; align-items:center;">
-      <div style="font-size:11px; color:var(--text-faint); width:16px;">${si+1}</div>
-      <input class="setinput" data-e="${ei}" data-s="${si}" data-f="w" type="number" inputmode="decimal" placeholder="kg" value="${s.w!==''&&s.w!==undefined?s.w:''}"
-        style="flex:1; background:var(--bg); border:1px solid var(--hairline); color:var(--text); padding:7px 8px; border-radius:8px; font-size:13px; font-family:'Inter',sans-serif;">
-      <input class="setinput" data-e="${ei}" data-s="${si}" data-f="r" type="number" inputmode="numeric" placeholder="reps" value="${s.r!==''&&s.r!==undefined?s.r:''}"
-        style="flex:1; background:var(--bg); border:1px solid var(--hairline); color:var(--text); padding:7px 8px; border-radius:8px; font-size:13px; font-family:'Inter',sans-serif;">
-      <input class="setinput" data-e="${ei}" data-s="${si}" data-f="rir" type="number" inputmode="numeric" placeholder="RIR" value="${s.rir!==''&&s.rir!==undefined?s.rir:''}"
-        style="width:62px; background:var(--bg); border:1px solid var(--hairline); color:var(--text); padding:7px 8px; border-radius:8px; font-size:13px; font-family:'Inter',sans-serif;">
-    </div>`;
-  }
-
   function bindSetInputs(dayIndex, day, log){
     document.querySelectorAll('.setinput').forEach(inp=>{
       inp.addEventListener('change', async ()=>{
         captureSets(day, log);
         await saveTraining();
+        // refresh the filled/count styling without losing focus position
+        const row = inp.closest('.t-setrow');
+        if(row){
+          const ei = Number(inp.getAttribute('data-e'));
+          const si = Number(inp.getAttribute('data-s'));
+          const st = (log.exercises[day.exercises[ei].name]||[])[si] || {};
+          row.classList.toggle('filled', !!st.r);
+        }
       });
     });
   }
@@ -3348,30 +3733,40 @@ Write week 1 of their training. Start conservatively enough that there is room t
   function renderPlanReview(body){
     const p = pendingPlan;
     body.innerHTML = `
-      <div class="serif" style="font-size:22px; font-weight:500; margin-bottom:4px;">Week ${p.weekNumber} is ready</div>
-      <div style="font-size:12.5px; color:var(--text-dim); margin-bottom:14px;">${escapeHtml(p.split||'')} — ${escapeHtml(p.focus||'')}</div>
-      ${p.coachNote?`<div class="insight-line" style="margin-bottom:16px;"><span class="i-dot"></span><span>${escapeHtml(p.coachNote)}</span></div>`:''}
+      <div class="t-header">
+        <div class="t-header-text">
+          <div class="t-title">Week ${p.weekNumber} is ready</div>
+          <div class="t-sub">${escapeHtml(p.split||'')}${p.focus?'. '+escapeHtml(p.focus):''}</div>
+        </div>
+      </div>
 
+      ${p.coachNote?`<div class="t-coachnote"><span>${escapeHtml(p.coachNote)}</span></div>`:''}
+
+      <div class="t-section-label">The week ahead</div>
       <div style="display:flex; flex-direction:column; gap:10px;">
-        ${(p.days||[]).map(day=>`
-          <div class="progress-card">
-            <div style="font-size:14px; font-weight:600; margin-bottom:6px;">${escapeHtml(day.name)}</div>
+        ${(p.days||[]).map((day,i)=>`
+          <div class="t-exercise" style="margin-bottom:0;">
+            <div class="t-ex-top" style="margin-bottom:8px;">
+              <div class="t-ex-name">${escapeHtml(day.name)}</div>
+              <div class="t-ex-count">${(day.exercises||[]).length}</div>
+            </div>
             ${(day.exercises||[]).map(ex=>`
-              <div style="font-size:12px; color:var(--text-dim); padding:3px 0;">
-                ${escapeHtml(ex.name)} — ${ex.sets}×${ex.repsLow}-${ex.repsHigh} @${ex.rir}RIR
+              <div style="display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--hairline);">
+                <span style="color:var(--text); min-width:0;">${escapeHtml(ex.name)}</span>
+                <span style="color:var(--text-dim); white-space:nowrap;">${ex.sets}×${ex.repsLow}-${ex.repsHigh} @${ex.rir}</span>
               </div>`).join('')}
-            ${day.conditioning?`<div style="font-size:11.5px; color:var(--text-faint); margin-top:6px;">+ ${escapeHtml(day.conditioning)}</div>`:''}
+            ${day.conditioning?`<div style="font-size:11.5px; color:var(--red); margin-top:9px;">+ ${escapeHtml(day.conditioning)}</div>`:''}
           </div>`).join('')}
       </div>
 
-      <div style="margin-top:18px; display:flex; gap:8px;">
-        <button class="sheet-btn sheet-btn-ghost" id="rejectPlan">Rebuild it</button>
-        <button class="sheet-btn sheet-btn-primary" id="approvePlan">Start week ${p.weekNumber}</button>
-      </div>
-      <div style="margin-top:12px;">
-        <input type="text" id="planTweak" placeholder="Want a change? Tell the coach..."
-          style="width:100%; background:var(--bg-elev); border:1px solid var(--hairline); color:var(--text); padding:11px 14px; border-radius:10px; font-size:13px; font-family:'Inter',sans-serif;">
-        <button class="edit-toggle-link" id="applyTweak" style="margin-top:8px;">Apply my change</button>
+      <div class="t-section-label">Change something</div>
+      <input type="text" id="planTweak" placeholder="e.g. swap the overhead press, my shoulder's sore"
+        style="width:100%; background:var(--bg-elev); border:1px solid var(--hairline); color:var(--text); padding:12px 14px; border-radius:10px; font-size:13px; font-family:'Inter',sans-serif;">
+      <button class="t-addset" id="applyTweak" style="margin-top:8px;">Rewrite the week with my change</button>
+
+      <div class="t-sticky-footer" style="display:flex; flex-direction:column; gap:8px;">
+        <button class="sheet-btn sheet-btn-primary" id="approvePlan" style="width:100%;">Start week ${p.weekNumber}</button>
+        <button class="sheet-btn sheet-btn-ghost" id="rejectPlan" style="width:100%;">Build a different week</button>
       </div>`;
 
     document.getElementById('approvePlan').addEventListener('click', async ()=>{
@@ -3390,7 +3785,7 @@ Write week 1 of their training. Start conservatively enough that there is room t
     document.getElementById('applyTweak').addEventListener('click', async ()=>{
       const tweak = document.getElementById('planTweak').value.trim();
       if(!tweak){ showToast('Describe the change first.'); return; }
-      body.innerHTML = `<div style="text-align:center; padding:60px 20px;">
+      body.innerHTML = `<div style="text-align:center; padding:70px 20px;">
         <div class="spinner" style="margin:0 auto 16px;"></div>
         <div style="font-size:13px; color:var(--text-dim);">Applying your change...</div></div>`;
       try{
@@ -3403,6 +3798,7 @@ Write week 1 of their training. Start conservatively enough that there is room t
           revised.weekNumber = pendingPlan.weekNumber;
           revised.generatedAt = new Date().toISOString();
           pendingPlan = revised; await saveTraining();
+          showToast('Week updated.');
         } else showToast("Couldn't apply that — try rewording it.");
       }catch(e){ showToast((e&&e.message)||'That failed — try again.'); }
       renderTrain();
