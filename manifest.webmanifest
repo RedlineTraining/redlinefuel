@@ -1,7 +1,7 @@
 {
-  "name": "Redline Fuel \u2014 Nutrition Tracker",
-  "short_name": "Redline Fuel",
-  "description": "AI-powered calorie and macro tracking. Snap a photo, get your numbers.",
+  "name": "Redline Training \u2014 Train / Eat / Track",
+  "short_name": "Redline",
+  "description": "AI training programmes and photo-based calorie tracking.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
