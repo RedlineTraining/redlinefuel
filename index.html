@@ -697,7 +697,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -1968,23 +1968,50 @@
 
   function extractJson(text){
     if(!text) return null;
-    // 1. straight parse (JSON mode returns clean JSON)
     try{ return JSON.parse(text.trim()); }catch(e){}
-    // 2. strip markdown fences
     const fenced = text.match(/```json([\s\S]*?)```/i) || text.match(/```([\s\S]*?)```/);
     const raw = fenced ? fenced[1] : text;
     try{ return JSON.parse(raw.trim()); }catch(e){}
-    // 3. take the outermost {...}
     const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');
-    if(start === -1 || end === -1 || end <= start){
-      console.error('No JSON found in model response:', text.slice(0, 500));
-      return null;
+    if(start !== -1 && end !== -1 && end > start){
+      try{ return JSON.parse(raw.slice(start, end+1)); }catch(e){}
     }
-    try{ return JSON.parse(raw.slice(start, end+1)); }
-    catch(e){
-      console.error('JSON parse failed. Raw response:', text.slice(0, 500));
-      return null;
+    // Last resort: the response was cut off mid-JSON. Walk it and close any
+    // open strings/brackets so a truncated but otherwise valid plan still loads.
+    const repaired = repairTruncatedJson(raw);
+    if(repaired){
+      try{ const o = JSON.parse(repaired); console.warn('Recovered truncated JSON'); return o; }catch(e){}
     }
+    console.error('No usable JSON in model response:', text.slice(0, 500));
+    return null;
+  }
+
+  function repairTruncatedJson(raw){
+    const start = raw.indexOf('{');
+    if(start === -1) return null;
+    let s = raw.slice(start);
+    const stack = [];
+    let inStr = false, esc = false, lastSafe = -1;
+    for(let i=0;i<s.length;i++){
+      const c = s[i];
+      if(esc){ esc = false; continue; }
+      if(c === '\\'){ esc = true; continue; }
+      if(c === '"'){ inStr = !inStr; continue; }
+      if(inStr) continue;
+      if(c === '{' || c === '[') stack.push(c);
+      else if(c === '}' || c === ']'){ stack.pop(); if(stack.length) lastSafe = i; }
+      else if(c === ',' && stack.length) lastSafe = i;
+    }
+    if(!stack.length) return null;           // nothing to repair
+    if(inStr || lastSafe === -1) {
+      // cut back to the last complete element we saw
+      if(lastSafe === -1) return null;
+    }
+    // trim any trailing partial element, then close what's open
+    let out = s.slice(0, lastSafe);
+    out = out.replace(/,\s*$/, '');
+    for(let i=stack.length-1;i>=0;i--) out += (stack[i] === '{' ? '}' : ']');
+    return out;
   }
 
   const ANALYSIS_SYSTEM = `You are a food recognition and nutrition estimation assistant inside a nutrition app. You give thoughtful, well-reasoned estimates — you are not a basic classifier, but you are also honest that a single photo or description is an estimate, not a lab measurement.
@@ -3073,6 +3100,40 @@ Respond with ONLY a JSON object, no markdown fences, no other text:
     return lines.join('\n');
   }
 
+  // Drop anything incomplete (can happen if a response was truncated and repaired),
+  // and fill sensible defaults so the UI never renders half an exercise.
+  function sanitisePlan(plan){
+    if(!plan || !Array.isArray(plan.days)) return null;
+    plan.days = plan.days.map(day=>{
+      if(!day || !Array.isArray(day.exercises)) return null;
+      day.exercises = day.exercises.filter(ex =>
+        ex && typeof ex.name === 'string' && ex.name.trim() &&
+        Number(ex.sets) > 0 && Number(ex.repsLow) > 0 && Number(ex.repsHigh) > 0
+      ).map(ex=>({
+        name: String(ex.name).trim(),
+        sets: Number(ex.sets),
+        repsLow: Math.min(Number(ex.repsLow), Number(ex.repsHigh)),
+        repsHigh: Math.max(Number(ex.repsLow), Number(ex.repsHigh)),
+        rir: (ex.rir === undefined || ex.rir === null || isNaN(Number(ex.rir))) ? 2 : Number(ex.rir),
+        tempo: (typeof ex.tempo === 'string' && /^\d-\d-\d-\d$/.test(ex.tempo.trim())) ? ex.tempo.trim() : '1-1-1-1',
+        restSeconds: Number(ex.restSeconds) > 0 ? Number(ex.restSeconds) : 90,
+        notes: typeof ex.notes === 'string' ? ex.notes : ''
+      }));
+      if(!day.exercises.length) return null;
+      return {
+        name: (day.name && String(day.name).trim()) || 'Session',
+        focus: typeof day.focus === 'string' ? day.focus : '',
+        exercises: day.exercises,
+        conditioning: typeof day.conditioning === 'string' ? day.conditioning : ''
+      };
+    }).filter(Boolean);
+    if(!plan.days.length) return null;
+    plan.split = typeof plan.split === 'string' ? plan.split : 'Training week';
+    plan.focus = typeof plan.focus === 'string' ? plan.focus : '';
+    plan.coachNote = typeof plan.coachNote === 'string' ? plan.coachNote : '';
+    return plan;
+  }
+
   async function generatePlan(isNextWeek){
     const body = document.getElementById('trainBody');
     try{
@@ -3091,8 +3152,9 @@ Write week ${trainingPlan.weekNumber + 1}. Apply double progression: where they 
 Write week 1 of their training. Start conservatively enough that there is room to progress, and explain in coachNote how progression will work.`;
       }
 
-      const text = await callClaude([{ role:'user', content: prompt }], TRAIN_SYSTEM, 3000, { json:true });
-      const plan = extractJson(text);
+      const text = await callClaude([{ role:'user', content: prompt }], TRAIN_SYSTEM, 8192, { json:true });
+      let plan = extractJson(text);
+      if(plan) plan = sanitisePlan(plan);
       if(!plan || !plan.days || !plan.days.length){
         body.innerHTML = `<div class="empty-note" style="padding:40px 20px;">Couldn't build the plan — ${escapeHtml((text||'no response').slice(0,120))}
           <div style="margin-top:16px;"><button class="ob-btn ob-btn-primary" id="retryPlan">Try again</button></div></div>`;
@@ -3334,8 +3396,9 @@ Write week 1 of their training. Start conservatively enough that there is room t
       try{
         const text = await callClaude([{ role:'user', content:
           `${trainingContext()}\n\nHere is the week you wrote:\n${JSON.stringify(pendingPlan)}\n\nThe lifter wants this change: "${tweak}"\n\nRewrite the whole week applying it, keeping everything else sound. Same JSON format.` }],
-          TRAIN_SYSTEM, 3000, { json:true });
-        const revised = extractJson(text);
+          TRAIN_SYSTEM, 8192, { json:true });
+        let revised = extractJson(text);
+        if(revised) revised = sanitisePlan(revised);
         if(revised && revised.days){
           revised.weekNumber = pendingPlan.weekNumber;
           revised.generatedAt = new Date().toISOString();
