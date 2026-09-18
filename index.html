@@ -688,7 +688,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -1105,8 +1105,13 @@
 
   function requireApiKey(){
     if(settings.apiKey && settings.apiKey.trim()) return true;
+    if(sb && currentUser) return true; // shared server proxy handles the key
     closeSheet();
-    showToast('Add a free Google AI key in Settings to enable scanning.');
+    if(sb && !currentUser){
+      showToast('Log in to use shared scanning, or add your own API key in Settings.');
+    } else {
+      showToast('Add a Google AI key in Settings to enable scanning.');
+    }
     openSettings();
     return false;
   }
