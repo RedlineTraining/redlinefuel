@@ -623,6 +623,46 @@
     box-shadow:0 12px 32px -12px rgba(0,0,0,.8);
   }
 
+
+  /* ---- portion selector ---- */
+  .portion-block{
+    background:var(--bg-sunken); border:1px solid var(--hairline);
+    border-radius:var(--r-panel); padding:13px 13px 12px; margin:14px 0 12px;
+  }
+  .portion-label{font-size:12px; font-weight:600; color:var(--text); margin-bottom:10px;}
+  .portion-row{display:grid; grid-template-columns:38px 1fr 38px minmax(96px,1.3fr); gap:7px; align-items:center;}
+  .portion-step{
+    height:40px; background:var(--bg-elev); border:1px solid var(--hairline-strong);
+    color:var(--text); border-radius:var(--r-control); font-size:18px; font-weight:600;
+    cursor:pointer; line-height:1; padding:0;
+    transition:transform .09s var(--ease), background-color .15s ease;
+  }
+  .portion-step:active{transform:scale(0.94); background:var(--bg-elev-2);}
+  .portion-qty{
+    height:40px; width:100%; min-width:0; text-align:center;
+    background:var(--bg-elev); border:1px solid var(--hairline-strong); color:var(--text);
+    border-radius:var(--r-control); font-size:17px; font-weight:700;
+    font-family:'Barlow Condensed',sans-serif; font-variant-numeric:tabular-nums;
+    -moz-appearance:textfield;
+  }
+  .portion-qty::-webkit-outer-spin-button,
+  .portion-qty::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .portion-qty:focus{outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft);}
+  .portion-unit{
+    height:40px; width:100%; min-width:0; background:var(--bg-elev);
+    border:1px solid var(--hairline-strong); color:var(--text); border-radius:var(--r-control);
+    font-size:12.5px; font-family:'Inter',sans-serif; padding:0 8px;
+    -webkit-appearance:none; appearance:none; cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,var(--text-dim) 50%),
+                     linear-gradient(135deg,var(--text-dim) 50%,transparent 50%);
+    background-position:calc(100% - 14px) 17px, calc(100% - 9px) 17px;
+    background-size:5px 5px, 5px 5px; background-repeat:no-repeat;
+    padding-right:26px;
+  }
+  .portion-unit:focus{outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft);}
+  .portion-grams{font-size:11px; color:var(--text-dim); margin-top:9px; font-variant-numeric:tabular-nums;}
+  .totals-row .t-macros{display:flex; gap:12px; font-variant-numeric:tabular-nums;}
+
   ::-webkit-scrollbar{height:0px; width:0px;}
 </style>
 </head>
@@ -660,7 +700,7 @@
     </div>
   </div>
 
-  <div id="onboardingView">
+  <div id="onboardingView" class="hidden">
     <div class="ob-dots" id="obDots"></div>
     <div class="ob-step" id="obStepContainer"></div>
   </div>
@@ -1003,7 +1043,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -1266,6 +1306,7 @@
     if(isNewAccount && profile && profile.onboarded) await pushAllLocal();
 
     if(profile && profile.onboarded){
+      document.getElementById('onboardingView').classList.add('hidden');
       document.getElementById('mainApp').classList.remove('hidden');
       mainInited = false;
       initMainApp();
@@ -2326,6 +2367,8 @@ Work through this step by step internally: identify each distinct food/ingredien
 
 Confidence rule (apply honestly, don't default to "high"): mark confidence "low" if the food is a composite/mixed dish where ingredients are hidden (casserole, soup, stew, sauce-covered food), if packaged food has an unreadable or absent label, or if the portion reference is ambiguous. Mark "medium" if you can see the components but portions are a genuine guess. Only mark "high" when the food is simple, clearly visible, and portion cues are strong. Your reasoning field should name the specific source of uncertainty when confidence is not high (e.g. "can't see what's under the sauce" or "no size reference in frame").
 
+Also return realistic serving units for the item so the user can say how much they actually ate. Always include a unit for the whole item as photographed, plus smaller natural units where they exist (a square of chocolate, a biscuit, a scoop of ice cream, a slice, a serving as stated on the packet, and always "grams"). Give the gram weight of ONE of each unit. Order them most-likely-first, and set defaultUnitIndex to the unit that matches what is visible in the photo.
+
 Respond with ONLY a JSON object, no other text, no markdown fences:
 {
   "name": "short overall name for the meal",
@@ -2336,7 +2379,10 @@ Respond with ONLY a JSON object, no other text, no markdown fences:
   "calories": total_calories_number,
   "protein_g": total_protein_number,
   "carbs_g": total_carbs_number,
-  "fat_g": total_fat_number
+  "fat_g": total_fat_number,
+  "units": [ { "name": "whole bar", "grams": number }, { "name": "square", "grams": number }, { "name": "grams", "grams": 1 } ],
+  "defaultUnitIndex": number,
+  "defaultQty": number
 }`;
 
   // ---- correction memory: makes repeat meals faster & more accurate over time ----
@@ -2565,6 +2611,23 @@ If — and only if — the user describes a specific meal or food they ate or wa
     reader.readAsDataURL(file);
   }
 
+  // Build a usable list of serving units, whatever the model gave us.
+  function buildUnits(result){
+    const totalG = Number(result.weight_g) || 0;
+    let units = Array.isArray(result.units) ? result.units
+      .filter(u => u && u.name && Number(u.grams) > 0)
+      .map(u => ({ name: String(u.name).trim(), grams: Number(u.grams) })) : [];
+
+    // always offer the whole item and grams as fallbacks
+    if(totalG > 0 && !units.some(u => Math.abs(u.grams - totalG) < 0.5)){
+      units.unshift({ name: 'whole item as photographed', grams: totalG });
+    }
+    if(!units.some(u => u.grams === 1)) units.push({ name: 'grams', grams: 1 });
+
+    if(!units.length) units = [{ name: 'serving', grams: totalG || 100 }, { name: 'grams', grams: 1 }];
+    return units;
+  }
+
   function handleAnalysisResult(result, source, correctionKey){
     if(settings.autoLog){
       logEntry({
@@ -2575,8 +2638,35 @@ If — and only if — the user describes a specific meal or food they ate or wa
       closeSheet();
       return;
     }
+
     const ingredients = Array.isArray(result.ingredients) ? result.ingredients : [];
     const confClass = (result.confidence||'medium').toLowerCase();
+    const units = buildUnits(result);
+
+    // baseline: macros per gram, taken from the full estimate
+    const baseG = Number(result.weight_g) || units[0].grams || 100;
+    const per = {
+      calories: (Number(result.calories)||0) / baseG,
+      protein:  (Number(result.protein_g)||0) / baseG,
+      carbs:    (Number(result.carbs_g)||0) / baseG,
+      fat:      (Number(result.fat_g)||0) / baseG
+    };
+
+    let unitIdx = Number(result.defaultUnitIndex);
+    if(!(unitIdx >= 0 && unitIdx < units.length)) unitIdx = 0;
+    let qty = Number(result.defaultQty) > 0 ? Number(result.defaultQty) : 1;
+    // if the default lands on grams, seed the quantity with the full weight
+    if(units[unitIdx].grams === 1 && qty === 1) qty = Math.round(baseG) || 1;
+
+    function currentGrams(){ return qty * units[unitIdx].grams; }
+    function currentMacros(){
+      const g = currentGrams();
+      return {
+        calories: per.calories * g, protein: per.protein * g,
+        carbs: per.carbs * g, fat: per.fat * g, weight_g: g
+      };
+    }
+
     document.getElementById('resultArea').innerHTML = `
       <div class="result-block">
         <div class="result-name-row">
@@ -2584,55 +2674,119 @@ If — and only if — the user describes a specific meal or food they ate or wa
           <span class="confidence-pill ${confClass}">${result._corrected ? 'from your history' : confClass+' confidence'}</span>
         </div>
         <div class="result-reasoning">${escapeHtml(result.reasoning||'')}</div>
-        <button class="edit-toggle-link" id="howWeEstimateLink" style="margin-bottom:8px;">How we estimate this</button>
+        <button class="edit-toggle-link" id="howWeEstimateLink" style="margin-bottom:10px;">How we estimate this</button>
+
         ${ingredients.length ? `<div class="ingredient-list">${ingredients.map(ing=>`
           <div class="ingredient-row">
             <div><span class="ing-name">${escapeHtml(ing.name||'')}</span><span class="ing-weight">${ing.weight_g?Math.round(ing.weight_g)+'g':''}</span></div>
             <div class="ing-cal">${Math.round(ing.calories||0)} kcal</div>
           </div>`).join('')}</div>` : ''}
+
+        <div class="portion-block">
+          <div class="portion-label">How much did you actually have?</div>
+          <div class="portion-row">
+            <button class="portion-step" id="qtyDown" aria-label="Less">−</button>
+            <input class="portion-qty" id="portionQty" type="number" inputmode="decimal" step="any" value="${qty}">
+            <button class="portion-step" id="qtyUp" aria-label="More">+</button>
+            <select class="portion-unit" id="portionUnit">
+              ${units.map((u,i)=>`<option value="${i}" ${i===unitIdx?'selected':''}>${escapeHtml(u.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="portion-grams" id="portionGrams"></div>
+        </div>
+
         <div class="totals-row">
-          <div class="t-kcal serif" id="resCalDisplay">${Math.round(result.calories||0)} kcal</div>
-          <div class="t-macros" id="resMacroDisplay">P ${Math.round(result.protein_g||0)}g · C ${Math.round(result.carbs_g||0)}g · F ${Math.round(result.fat_g||0)}g</div>
+          <div class="t-kcal serif" id="resCalDisplay"></div>
+          <div class="t-macros" id="resMacroDisplay"></div>
         </div>
-        <button class="edit-toggle-link" id="adjustNumbersLink" style="margin-top:10px;">Adjust numbers</button>
+
+        <button class="edit-toggle-link" id="adjustNumbersLink" style="margin-top:10px;">Enter exact numbers instead</button>
         <div class="edit-grid hidden" id="adjustGrid">
-          <div class="edit-field"><label>Weight (g)</label><input type="number" id="resWeight" value="${Math.round(result.weight_g||0)}"></div>
-          <div class="edit-field"><label>Calories</label><input type="number" id="resCal" value="${Math.round(result.calories||0)}"></div>
-          <div class="edit-field"><label>Protein (g)</label><input type="number" id="resProtein" value="${Math.round(result.protein_g||0)}"></div>
-          <div class="edit-field"><label>Carbs (g)</label><input type="number" id="resCarbs" value="${Math.round(result.carbs_g||0)}"></div>
-          <div class="edit-field" style="grid-column:1/-1;"><label>Fat (g)</label><input type="number" id="resFat" value="${Math.round(result.fat_g||0)}"></div>
+          <div class="edit-field"><label>Weight (g)</label><input type="number" id="resWeight"></div>
+          <div class="edit-field"><label>Calories</label><input type="number" id="resCal"></div>
+          <div class="edit-field"><label>Protein (g)</label><input type="number" id="resProtein"></div>
+          <div class="edit-field"><label>Carbs (g)</label><input type="number" id="resCarbs"></div>
+          <div class="edit-field" style="grid-column:1/-1;"><label>Fat (g)</label><input type="number" id="resFat"></div>
         </div>
+
         <div class="sheet-actions">
           <button class="sheet-btn sheet-btn-ghost" id="resDiscard">Discard</button>
           <button class="sheet-btn sheet-btn-primary" id="resConfirm">Log this meal</button>
         </div>
       </div>
     `;
-    document.getElementById('toggleManualEntry').classList.add('hidden');
-    document.getElementById('adjustNumbersLink').addEventListener('click', ()=>{
-      document.getElementById('adjustGrid').classList.toggle('hidden');
+
+    function refresh(){
+      const m = currentMacros();
+      document.getElementById('resCalDisplay').textContent = Math.round(m.calories) + ' kcal';
+      document.getElementById('resMacroDisplay').innerHTML =
+        `<span>P ${Math.round(m.protein)}g</span><span>C ${Math.round(m.carbs)}g</span><span>F ${Math.round(m.fat)}g</span>`;
+      const u = units[unitIdx];
+      document.getElementById('portionGrams').textContent =
+        u.grams === 1 ? '' : `about ${Math.round(currentGrams())}g in total`;
+      // keep the manual fields in step, so switching over doesn't lose the portion
+      const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.value = Math.round(v); };
+      set('resWeight', m.weight_g); set('resCal', m.calories);
+      set('resProtein', m.protein); set('resCarbs', m.carbs); set('resFat', m.fat);
+    }
+    refresh();
+
+    document.getElementById('portionQty').addEventListener('input', ()=>{
+      const v = parseFloat(document.getElementById('portionQty').value);
+      qty = (isFinite(v) && v > 0) ? v : 0;
+      refresh();
     });
+    document.getElementById('portionUnit').addEventListener('change', (e)=>{
+      const newIdx = Number(e.target.value);
+      // switching to or from grams should keep the amount sensible
+      const gramsBefore = currentGrams();
+      unitIdx = newIdx;
+      const u = units[unitIdx];
+      qty = u.grams === 1 ? Math.round(gramsBefore) : Math.round((gramsBefore / u.grams) * 100) / 100;
+      if(!(qty > 0)) qty = 1;
+      document.getElementById('portionQty').value = qty;
+      refresh();
+    });
+    document.getElementById('qtyUp').addEventListener('click', ()=>{
+      const u = units[unitIdx];
+      qty = Math.round((qty + (u.grams === 1 ? 10 : 0.5)) * 100) / 100;
+      document.getElementById('portionQty').value = qty; refresh();
+    });
+    document.getElementById('qtyDown').addEventListener('click', ()=>{
+      const u = units[unitIdx];
+      const stepDown = u.grams === 1 ? 10 : 0.5;
+      qty = Math.max(Math.round((qty - stepDown) * 100) / 100, u.grams === 1 ? 5 : 0.5);
+      document.getElementById('portionQty').value = qty; refresh();
+    });
+
     document.getElementById('howWeEstimateLink').addEventListener('click', ()=>{
       document.getElementById('trustModal').classList.remove('hidden');
     });
+    document.getElementById('adjustNumbersLink').addEventListener('click', ()=>{
+      document.getElementById('adjustGrid').classList.toggle('hidden');
+    });
     document.getElementById('resDiscard').addEventListener('click', resetSheet);
+
     document.getElementById('resConfirm').addEventListener('click', async ()=>{
       const grid = document.getElementById('adjustGrid');
-      const usingAdjusted = !grid.classList.contains('hidden');
+      const manual = !grid.classList.contains('hidden');
+      const m = currentMacros();
       const entry = {
         name: document.getElementById('resName').value || 'Meal',
-        weight_g: usingAdjusted ? Number(document.getElementById('resWeight').value)||0 : (result.weight_g||0),
-        calories: usingAdjusted ? Number(document.getElementById('resCal').value)||0 : (result.calories||0),
-        protein: usingAdjusted ? Number(document.getElementById('resProtein').value)||0 : (result.protein_g||0),
-        carbs: usingAdjusted ? Number(document.getElementById('resCarbs').value)||0 : (result.carbs_g||0),
-        fat: usingAdjusted ? Number(document.getElementById('resFat').value)||0 : (result.fat_g||0),
+        weight_g: manual ? Number(document.getElementById('resWeight').value)||0 : Math.round(m.weight_g),
+        calories: manual ? Number(document.getElementById('resCal').value)||0 : Math.round(m.calories),
+        protein:  manual ? Number(document.getElementById('resProtein').value)||0 : Math.round(m.protein),
+        carbs:    manual ? Number(document.getElementById('resCarbs').value)||0 : Math.round(m.carbs),
+        fat:      manual ? Number(document.getElementById('resFat').value)||0 : Math.round(m.fat),
         source
       };
+      if(entry.calories <= 0){ showToast('That comes to zero calories — check the amount.'); return; }
       logEntry(entry);
-      // if the user corrected the AI's numbers, remember it for next time — this is what makes repeat meals get faster & more accurate
-      if(usingAdjusted){
+      // remember a correction only when the user typed their own numbers
+      if(manual){
         await saveCorrection(correctionKey || entry.name, {
-          calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fat: entry.fat, weight_g: entry.weight_g
+          calories: entry.calories, protein: entry.protein, carbs: entry.carbs,
+          fat: entry.fat, weight_g: entry.weight_g
         });
       }
       showToast(`Logged: ${entry.name} — ${Math.round(entry.calories)} kcal`);
