@@ -663,6 +663,29 @@
   .portion-grams{font-size:11px; color:var(--text-dim); margin-top:9px; font-variant-numeric:tabular-nums;}
   .totals-row .t-macros{display:flex; gap:12px; font-variant-numeric:tabular-nums;}
 
+
+  /* ---- editable ingredients ---- */
+  .ing-header{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:12px; font-weight:600; color:var(--text); margin:14px 0 6px;
+  }
+  .ing-hint{font-size:10.5px; font-weight:400; color:var(--text-faint);}
+  .ingredient-list{margin-bottom:4px;}
+  .ingredient-row{
+    width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px;
+    background:none; border:none; border-bottom:1px solid var(--hairline);
+    padding:10px 2px; text-align:left; cursor:pointer; font-family:'Inter',sans-serif;
+    transition:background-color .15s ease;
+  }
+  .ingredient-row:active{background:var(--bg-elev-2);}
+  .ing-left{display:flex; align-items:baseline; gap:7px; min-width:0;}
+  .ing-name{font-size:13px; color:var(--text);}
+  .ing-weight{font-size:10.5px; color:var(--text-faint); flex-shrink:0; font-variant-numeric:tabular-nums;}
+  .ing-right{display:flex; align-items:center; gap:9px; flex-shrink:0;}
+  .ing-cal{font-size:12px; color:var(--text-dim); font-variant-numeric:tabular-nums;}
+  .ing-edit{font-size:12px; color:var(--text-faint);}
+  .ingredient-row:active .ing-edit{color:var(--red);}
+
   ::-webkit-scrollbar{height:0px; width:0px;}
 </style>
 </head>
@@ -845,11 +868,11 @@
     </div>
 
     <div id="photoMode">
-      <input type="file" accept="image/*" capture="environment" id="photoInput">
+      <input type="file" accept="image/*" id="photoInput">
       <div class="capture-tile" id="captureTile">
         <div class="c-icon">◎</div>
-        <div class="c-cta">Take or upload a photo</div>
-        <div class="c-sub">Plate, package, menu — whatever you've got</div>
+        <div class="c-cta">Take a photo or choose one</div>
+        <div class="c-sub">Camera or photo library. Plate, packet or menu.</div>
       </div>
       <div class="preview-wrap hidden" id="previewWrap">
         <img id="previewImg" src="">
@@ -1043,7 +1066,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -2628,6 +2651,92 @@ If — and only if — the user describes a specific meal or food they ate or wa
     return units;
   }
 
+  function openIngredientFix(result, index, source, correctionKey){
+    const ing = (result.ingredients||[])[index];
+    if(!ing) return;
+    const wrap = document.getElementById('resultArea');
+    const prevHTML = wrap.innerHTML;
+
+    wrap.innerHTML = `
+      <div class="result-block">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+          <button class="t-back" id="fixBack" aria-label="Back">‹</button>
+          <div style="min-width:0;">
+            <div class="serif" style="font-size:19px; font-weight:600;">Correct this item</div>
+            <div style="font-size:11.5px; color:var(--text-dim); margin-top:2px;">We read it as ${escapeHtml(ing.name||'')}</div>
+          </div>
+        </div>
+
+        <div class="ob-field">
+          <label>What is it actually?</label>
+          <input type="text" id="fixName" placeholder="e.g. sour cream" autocapitalize="none">
+        </div>
+
+        <div class="portion-block" style="margin-top:6px;">
+          <div class="portion-label">Roughly how much?</div>
+          <div class="portion-row" style="grid-template-columns:38px 1fr 38px minmax(84px,1fr);">
+            <button class="portion-step" id="fixDown">−</button>
+            <input class="portion-qty" id="fixGrams" type="number" inputmode="numeric" value="${Math.round(ing.weight_g||30)}">
+            <button class="portion-step" id="fixUp">+</button>
+            <div style="font-size:12.5px; color:var(--text-dim); align-self:center;">grams</div>
+          </div>
+          <div class="portion-grams">Leave it if the amount looked about right.</div>
+        </div>
+
+        <div class="sheet-actions">
+          <button class="sheet-btn sheet-btn-ghost" id="fixCancel">Cancel</button>
+          <button class="sheet-btn sheet-btn-primary" id="fixApply">Update estimate</button>
+        </div>
+      </div>`;
+
+    const back = ()=>{ wrap.innerHTML = prevHTML; handleAnalysisResult(result, source, correctionKey); };
+    document.getElementById('fixBack').addEventListener('click', back);
+    document.getElementById('fixCancel').addEventListener('click', back);
+    document.getElementById('fixUp').addEventListener('click', ()=>{
+      const el=document.getElementById('fixGrams'); el.value = Math.max(1, (Number(el.value)||0) + 5);
+    });
+    document.getElementById('fixDown').addEventListener('click', ()=>{
+      const el=document.getElementById('fixGrams'); el.value = Math.max(1, (Number(el.value)||0) - 5);
+    });
+    setTimeout(()=>{ const f=document.getElementById('fixName'); if(f) f.focus(); }, 60);
+
+    document.getElementById('fixApply').addEventListener('click', async ()=>{
+      const newName = document.getElementById('fixName').value.trim();
+      const grams = Number(document.getElementById('fixGrams').value) || Number(ing.weight_g) || 30;
+      if(!newName){ showToast('Type what it actually is first.'); return; }
+
+      wrap.innerHTML = `<div style="text-align:center; padding:56px 20px;">
+        <div class="spinner" style="margin:0 auto 14px;"></div>
+        <div style="font-size:13px; color:var(--text-dim);">Re-estimating with ${escapeHtml(newName)}...</div></div>`;
+
+      const others = (result.ingredients||[]).filter((_,i)=>i!==index)
+        .map(x=>`${x.name} (~${Math.round(x.weight_g||0)}g)`).join(', ');
+
+      try{
+        const text = await callClaude([{ role:'user', content:
+          `A meal was estimated as "${result.name}" containing: ${(result.ingredients||[]).map(x=>x.name).join(', ')}.
+
+The user says one item was misidentified: what we called "${ing.name}" is actually "${newName}", about ${grams}g.
+
+Re-estimate the WHOLE meal with that correction applied. Keep the other items as they were${others?` (${others})`:''}. Recalculate all totals and the serving units for the corrected meal.` }],
+          ANALYSIS_SYSTEM, 1400, { json:true });
+
+        const revised = extractJson(text);
+        if(!revised || !revised.calories){
+          showToast("Couldn't re-estimate that — try different wording.");
+          wrap.innerHTML = prevHTML; handleAnalysisResult(result, source, correctionKey); return;
+        }
+        revised._corrected = false;
+        revised.reasoning = `Updated after you corrected ${ing.name} to ${newName}. ` + (revised.reasoning||'');
+        handleAnalysisResult(revised, source, correctionKey || revised.name);
+        showToast('Estimate updated.');
+      }catch(e){
+        showToast((e&&e.message)||'That failed — try again.');
+        wrap.innerHTML = prevHTML; handleAnalysisResult(result, source, correctionKey);
+      }
+    });
+  }
+
   function handleAnalysisResult(result, source, correctionKey){
     if(settings.autoLog){
       logEntry({
@@ -2676,11 +2785,22 @@ If — and only if — the user describes a specific meal or food they ate or wa
         <div class="result-reasoning">${escapeHtml(result.reasoning||'')}</div>
         <button class="edit-toggle-link" id="howWeEstimateLink" style="margin-bottom:10px;">How we estimate this</button>
 
-        ${ingredients.length ? `<div class="ingredient-list">${ingredients.map(ing=>`
-          <div class="ingredient-row">
-            <div><span class="ing-name">${escapeHtml(ing.name||'')}</span><span class="ing-weight">${ing.weight_g?Math.round(ing.weight_g)+'g':''}</span></div>
-            <div class="ing-cal">${Math.round(ing.calories||0)} kcal</div>
-          </div>`).join('')}</div>` : ''}
+        ${ingredients.length ? `
+          <div class="ing-header">
+            <span>What we identified</span>
+            <span class="ing-hint">tap to correct</span>
+          </div>
+          <div class="ingredient-list">${ingredients.map((ing,ii)=>`
+            <button class="ingredient-row" data-fixing="${ii}">
+              <div class="ing-left">
+                <span class="ing-name">${escapeHtml(ing.name||'')}</span>
+                <span class="ing-weight">${ing.weight_g?Math.round(ing.weight_g)+'g':''}</span>
+              </div>
+              <div class="ing-right">
+                <span class="ing-cal">${Math.round(ing.calories||0)} kcal</span>
+                <span class="ing-edit">✎</span>
+              </div>
+            </button>`).join('')}</div>` : ''}
 
         <div class="portion-block">
           <div class="portion-label">How much did you actually have?</div>
@@ -2761,6 +2881,14 @@ If — and only if — the user describes a specific meal or food they ate or wa
 
     document.getElementById('howWeEstimateLink').addEventListener('click', ()=>{
       document.getElementById('trustModal').classList.remove('hidden');
+    });
+
+    // Correct a misidentified ingredient, then re-estimate the whole meal around it.
+    document.querySelectorAll('[data-fixing]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const ii = Number(btn.getAttribute('data-fixing'));
+        openIngredientFix(result, ii, source, correctionKey);
+      });
     });
     document.getElementById('adjustNumbersLink').addEventListener('click', ()=>{
       document.getElementById('adjustGrid').classList.toggle('hidden');
