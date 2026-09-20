@@ -675,6 +675,7 @@
     width:100%; display:flex; justify-content:space-between; align-items:center; gap:10px;
     background:none; border:none; border-bottom:1px solid var(--hairline);
     padding:10px 2px; text-align:left; cursor:pointer; font-family:'Inter',sans-serif;
+    color:var(--text);
     transition:background-color .15s ease;
   }
   .ingredient-row:active{background:var(--bg-elev-2);}
@@ -738,6 +739,58 @@
   .confirm-body{font-size:13px; color:var(--text-dim); line-height:1.55; margin-bottom:18px;}
   .confirm-actions{display:flex; gap:9px;}
   .confirm-actions button{flex:1;}
+
+
+  /* ---- meals grouped by time of day ---- */
+  .meal-group{ margin-bottom:6px; }
+  .meal-group-head{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:12px 0 7px; border-bottom:1px solid var(--hairline);
+  }
+  .mg-left{display:flex; align-items:baseline; gap:9px; min-width:0;}
+  .mg-name{font-size:13.5px; font-weight:600; color:var(--text);}
+  .mg-kcal{font-size:11.5px; color:var(--text-dim); font-variant-numeric:tabular-nums;}
+  .mg-add{
+    width:28px; height:28px; flex-shrink:0; border-radius:50%;
+    background:var(--bg-elev); border:1px solid var(--hairline-strong);
+    color:var(--text-dim); font-size:16px; line-height:1; padding:0; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .09s var(--ease), background-color .15s ease, color .15s ease;
+  }
+  .mg-add:active{transform:scale(0.9); background:var(--red-soft); color:var(--red); border-color:var(--red-dim);}
+  .mg-empty{font-size:11.5px; color:var(--text-faint); padding:9px 2px 4px;}
+
+  .meal-row{
+    width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:none; border:none; border-bottom:1px solid var(--hairline);
+    padding:11px 2px; text-align:left; cursor:pointer; font-family:'Inter',sans-serif;
+    color:var(--text);
+    transition:background-color .15s ease;
+  }
+  .meal-row .name{color:var(--text); font-size:14px; font-weight:500;}
+  .meal-row .kcal{color:var(--text); font-family:'Barlow Condensed',sans-serif; font-size:19px; font-weight:600;}
+  .meal-row:active{background:var(--bg-elev);}
+  .mr-left{min-width:0;}
+  .mr-edit{color:var(--text-faint); font-size:17px;}
+  .meal-row:active .mr-edit{color:var(--red);}
+
+  /* ---- meal chips ---- */
+  .meal-chips{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
+  .meal-chip{
+    padding:10px 4px; border-radius:var(--r-control); font-size:12px; font-weight:600;
+    background:var(--bg-elev); border:1px solid var(--hairline-strong); color:var(--text-dim);
+    cursor:pointer; font-family:'Inter',sans-serif;
+    transition:transform .09s var(--ease), background-color .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .meal-chip:active{transform:scale(0.96);}
+  .meal-chip.on{
+    background:linear-gradient(180deg, var(--red-soft) 0%, transparent 100%);
+    border-color:var(--red); color:var(--text);
+  }
+  .meal-picker{
+    background:var(--bg-sunken); border:1px solid var(--hairline);
+    border-radius:var(--r-panel); padding:13px; margin:14px 0 0;
+  }
 
   ::-webkit-scrollbar{height:0px; width:0px;}
 </style>
@@ -1090,6 +1143,41 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="editEntryModal">
+  <div class="modal">
+    <div class="overlay-head">
+      <h3 class="serif" style="margin:0;">Edit entry</h3>
+      <button class="overlay-x" id="editClose" aria-label="Close">✕</button>
+    </div>
+
+    <div class="ob-field" style="margin-bottom:14px;">
+      <label>Name</label>
+      <input type="text" id="editName">
+    </div>
+
+    <div class="portion-label" style="margin-bottom:9px;">Which meal?</div>
+    <div class="meal-chips" id="editMealChips" style="margin-bottom:16px;">
+      <button class="meal-chip" data-meal="breakfast">Breakfast</button>
+      <button class="meal-chip" data-meal="lunch">Lunch</button>
+      <button class="meal-chip" data-meal="dinner">Dinner</button>
+      <button class="meal-chip" data-meal="snacks">Snacks</button>
+    </div>
+
+    <div class="edit-grid">
+      <div class="edit-field"><label>Calories</label><input type="number" id="editCal"></div>
+      <div class="edit-field"><label>Weight (g)</label><input type="number" id="editWeight"></div>
+      <div class="edit-field"><label>Protein (g)</label><input type="number" id="editProtein"></div>
+      <div class="edit-field"><label>Carbs (g)</label><input type="number" id="editCarbs"></div>
+      <div class="edit-field" style="grid-column:1/-1;"><label>Fat (g)</label><input type="number" id="editFat"></div>
+    </div>
+
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="sheet-btn sheet-btn-ghost" id="editDelete" style="color:var(--red); border-color:var(--red-dim);">Delete</button>
+      <button class="sheet-btn sheet-btn-primary" id="editSave">Save changes</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -1131,7 +1219,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -2079,28 +2167,66 @@
     document.getElementById(key+'Bar').style.width = pct+'%';
     document.getElementById(key+'Val').innerHTML = `<b>${Math.round(consumed)}</b>/${target}g`;
   }
+  const MEALS = [
+    ['breakfast','Breakfast'],
+    ['lunch','Lunch'],
+    ['dinner','Dinner'],
+    ['snacks','Snacks']
+  ];
+  const MEAL_LABEL = k => (MEALS.find(m=>m[0]===k)||[])[1] || 'Snacks';
+
+  // Sensible guess from the clock — the user can always change it.
+  function defaultMeal(){
+    const h = new Date().getHours();
+    if(h >= 5  && h < 11) return 'breakfast';
+    if(h >= 11 && h < 15) return 'lunch';
+    if(h >= 15 && h < 21) return 'dinner';
+    return 'snacks';
+  }
+  // entries logged before meal types existed
+  const mealOf = e => (e && e.meal && MEALS.some(m=>m[0]===e.meal)) ? e.meal : 'snacks';
+
   function renderMealList(){
     const list = document.getElementById('mealList');
-    if(entries.length===0){
-      list.innerHTML = '<div class="empty-note">No meals yet today. Tap Add a meal to log your first.</div>';
-      return;
-    }
-    list.innerHTML = entries.slice().reverse().map(e=>`
-      <div class="meal-row" data-id="${e.id}">
-        <div>
-          <div class="name">${escapeHtml(e.name)}</div>
-          <div class="meta"><span>P ${Math.round(e.protein||0)}g</span><span>C ${Math.round(e.carbs||0)}g</span><span>F ${Math.round(e.fat||0)}g</span>${e.weight_g?`<span>~${Math.round(e.weight_g)}g</span>`:''}</div>
-        </div>
-        <div class="row-right"><div class="kcal">${Math.round(e.calories)}</div><button class="meal-del" data-del="${e.id}">✕</button></div>
-      </div>
-    `).join('');
-    list.querySelectorAll('[data-del]').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        entries = entries.filter(e=>e.id!==btn.getAttribute('data-del'));
-        await saveEntries(); render();
+    const byMeal = {};
+    MEALS.forEach(([k])=> byMeal[k] = []);
+    entries.forEach(e => byMeal[mealOf(e)].push(e));
+
+    list.innerHTML = MEALS.map(([key,label])=>{
+      const items = byMeal[key];
+      const kcal = items.reduce((n,e)=>n+(Number(e.calories)||0),0);
+      return `
+        <div class="meal-group">
+          <div class="meal-group-head">
+            <div class="mg-left">
+              <span class="mg-name">${label}</span>
+              ${items.length?`<span class="mg-kcal">${Math.round(kcal)} kcal</span>`:''}
+            </div>
+            <button class="mg-add" data-addmeal="${key}" aria-label="Add to ${label}">+</button>
+          </div>
+          ${items.length ? items.map(e=>`
+            <button class="meal-row" data-edit="${e.id}">
+              <div class="mr-left">
+                <div class="name">${escapeHtml(e.name)}</div>
+                <div class="meta"><span>P ${Math.round(e.protein||0)}g</span><span>C ${Math.round(e.carbs||0)}g</span><span>F ${Math.round(e.fat||0)}g</span>${e.weight_g?`<span>~${Math.round(e.weight_g)}g</span>`:''}</div>
+              </div>
+              <div class="row-right"><div class="kcal">${Math.round(e.calories)}</div><span class="mr-edit">›</span></div>
+            </button>`).join('')
+          : `<div class="mg-empty">Nothing yet</div>`}
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('[data-addmeal]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        pendingMeal = btn.getAttribute('data-addmeal');
+        openSheet();
       });
     });
+    list.querySelectorAll('[data-edit]').forEach(btn=>{
+      btn.addEventListener('click', ()=> openEditEntry(btn.getAttribute('data-edit')));
+    });
   }
+
 
   // ================= INSIGHT (adaptive trend) =================
   async function computeInsight(){
@@ -2400,6 +2526,7 @@
     return block ? block.text : '';
   }
   let lastRawModelResponse = '';
+  let pendingMeal = null; // set when the user taps + on a specific meal section
 
   function extractJson(text){
     if(!text) return null;
@@ -2567,7 +2694,7 @@ If — and only if — the user describes a specific meal or food they ate or wa
     sheet.classList.remove('hidden');
     resetSheet();
   }
-  function closeSheet(){ sheet.classList.add('hidden'); }
+  function closeSheet(){ sheet.classList.add('hidden'); pendingMeal = null; }
   function resetSheet(){
     document.getElementById('photoInput').value = '';
     document.getElementById('previewWrap').classList.add('hidden');
@@ -2866,6 +2993,13 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
               </div>
             </button>`).join('')}</div>` : ''}
 
+        <div class="meal-picker">
+          <div class="portion-label" style="margin-bottom:9px;">Which meal?</div>
+          <div class="meal-chips" id="mealChips">
+            ${MEALS.map(([k,l])=>`<button class="meal-chip" data-meal="${k}">${l}</button>`).join('')}
+          </div>
+        </div>
+
         <div class="portion-block">
           <div class="portion-label">How much did you actually have?</div>
           <div class="portion-row">
@@ -2900,6 +3034,13 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
       </div>
     `;
 
+    let chosenMeal = pendingMeal || defaultMeal();
+    function paintMealChips(){
+      document.querySelectorAll('#mealChips .meal-chip').forEach(c=>{
+        c.classList.toggle('on', c.getAttribute('data-meal') === chosenMeal);
+      });
+    }
+
     function refresh(){
       const m = currentMacros();
       document.getElementById('resCalDisplay').textContent = Math.round(m.calories) + ' kcal';
@@ -2914,6 +3055,10 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
       set('resProtein', m.protein); set('resCarbs', m.carbs); set('resFat', m.fat);
     }
     refresh();
+    paintMealChips();
+    document.querySelectorAll('#mealChips .meal-chip').forEach(c=>{
+      c.addEventListener('click', ()=>{ chosenMeal = c.getAttribute('data-meal'); paintMealChips(); });
+    });
 
     document.getElementById('portionQty').addEventListener('input', ()=>{
       const v = parseFloat(document.getElementById('portionQty').value);
@@ -2970,6 +3115,7 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
         protein:  manual ? Number(document.getElementById('resProtein').value)||0 : Math.round(m.protein),
         carbs:    manual ? Number(document.getElementById('resCarbs').value)||0 : Math.round(m.carbs),
         fat:      manual ? Number(document.getElementById('resFat').value)||0 : Math.round(m.fat),
+        meal: chosenMeal,
         source
       };
       if(entry.calories <= 0){ showToast('That comes to zero calories — check the amount.'); return; }
@@ -2987,7 +3133,12 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
   }
 
   function logEntry(entry){
-    entries.push({ id:cryptoId(), ...entry });
+    entries.push({
+      id: cryptoId(),
+      meal: entry.meal || pendingMeal || defaultMeal(),
+      loggedAt: new Date().toISOString(),
+      ...entry
+    });
     saveEntries();
     render();
   }
@@ -3010,6 +3161,7 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
       protein:Number(document.getElementById('manProtein').value)||0,
       carbs:Number(document.getElementById('manCarbs').value)||0,
       fat:Number(document.getElementById('manFat').value)||0,
+      meal: pendingMeal || defaultMeal(),
       source:'manual'
     });
     showToast(`Logged: ${name}`);
@@ -3055,7 +3207,7 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
         logEntry({
           name: msg.logJson.name||'Logged meal', calories: msg.logJson.calories||0,
           protein: msg.logJson.protein_g||0, carbs: msg.logJson.carbs_g||0, fat: msg.logJson.fat_g||0,
-          weight_g: msg.logJson.weight_g||null, source:'chat'
+          weight_g: msg.logJson.weight_g||null, meal: defaultMeal(), source:'chat'
         });
         btn.textContent='Logged ✓'; btn.disabled=true;
         showToast(`Logged: ${msg.logJson.name}`);
@@ -4226,6 +4378,71 @@ Write week 1 of their training. Start conservatively enough that there is room t
       if(open.id === 'mealSheet') closeSheet(); else open.classList.add('hidden');
     });
   })();
+
+  // ---- edit a logged entry ----
+  let editingId = null;
+
+  function openEditEntry(id){
+    const e = entries.find(x=>x.id===id);
+    if(!e) return;
+    editingId = id;
+    document.getElementById('editName').value = e.name || '';
+    document.getElementById('editCal').value = Math.round(e.calories||0);
+    document.getElementById('editWeight').value = e.weight_g ? Math.round(e.weight_g) : '';
+    document.getElementById('editProtein').value = Math.round(e.protein||0);
+    document.getElementById('editCarbs').value = Math.round(e.carbs||0);
+    document.getElementById('editFat').value = Math.round(e.fat||0);
+    const current = mealOf(e);
+    document.querySelectorAll('#editMealChips .meal-chip').forEach(c=>{
+      c.classList.toggle('on', c.getAttribute('data-meal') === current);
+    });
+    document.getElementById('editEntryModal').classList.remove('hidden');
+  }
+  function closeEdit(){
+    document.getElementById('editEntryModal').classList.add('hidden');
+    editingId = null;
+  }
+
+  document.querySelectorAll('#editMealChips .meal-chip').forEach(c=>{
+    c.addEventListener('click', ()=>{
+      document.querySelectorAll('#editMealChips .meal-chip').forEach(x=>x.classList.remove('on'));
+      c.classList.add('on');
+    });
+  });
+  document.getElementById('editClose').addEventListener('click', closeEdit);
+  document.getElementById('editEntryModal').addEventListener('click', e=>{
+    if(e.target.id === 'editEntryModal') closeEdit();
+  });
+
+  document.getElementById('editSave').addEventListener('click', async ()=>{
+    const e = entries.find(x=>x.id===editingId);
+    if(!e) return closeEdit();
+    const cal = Number(document.getElementById('editCal').value)||0;
+    if(cal <= 0){ showToast('Calories need to be above zero.'); return; }
+    const chip = document.querySelector('#editMealChips .meal-chip.on');
+    e.name = document.getElementById('editName').value.trim() || e.name;
+    e.calories = cal;
+    e.weight_g = Number(document.getElementById('editWeight').value)||0;
+    e.protein = Number(document.getElementById('editProtein').value)||0;
+    e.carbs = Number(document.getElementById('editCarbs').value)||0;
+    e.fat = Number(document.getElementById('editFat').value)||0;
+    e.meal = chip ? chip.getAttribute('data-meal') : mealOf(e);
+    await saveEntries();
+    render();
+    closeEdit();
+    showToast('Entry updated.');
+  });
+
+  document.getElementById('editDelete').addEventListener('click', async ()=>{
+    const e = entries.find(x=>x.id===editingId);
+    if(!e) return closeEdit();
+    if(!await askConfirm('Delete this entry?', `${e.name} will be removed from today's log.`, 'Delete')) return;
+    entries = entries.filter(x=>x.id!==editingId);
+    await saveEntries();
+    render();
+    closeEdit();
+    showToast('Entry deleted.');
+  });
 
   // ================= INIT =================
   loadAll();
