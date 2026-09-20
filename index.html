@@ -1163,6 +1163,8 @@
       <button class="meal-chip" data-meal="snacks">Snacks</button>
     </div>
 
+    <div id="editIngredients"></div>
+
     <div class="edit-grid">
       <div class="edit-field"><label>Calories</label><input type="number" id="editCal"></div>
       <div class="edit-field"><label>Weight (g)</label><input type="number" id="editWeight"></div>
@@ -1219,7 +1221,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -3116,6 +3118,7 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
         carbs:    manual ? Number(document.getElementById('resCarbs').value)||0 : Math.round(m.carbs),
         fat:      manual ? Number(document.getElementById('resFat').value)||0 : Math.round(m.fat),
         meal: chosenMeal,
+        ingredients: Array.isArray(result.ingredients) ? result.ingredients : [],
         source
       };
       if(entry.calories <= 0){ showToast('That comes to zero calories — check the amount.'); return; }
@@ -4396,8 +4399,155 @@ Write week 1 of their training. Start conservatively enough that there is room t
     document.querySelectorAll('#editMealChips .meal-chip').forEach(c=>{
       c.classList.toggle('on', c.getAttribute('data-meal') === current);
     });
+    renderEditIngredients(e);
     document.getElementById('editEntryModal').classList.remove('hidden');
   }
+  function renderEditIngredients(e){
+    const wrap = document.getElementById('editIngredients');
+    const ings = Array.isArray(e.ingredients) ? e.ingredients : [];
+    if(!ings.length){ wrap.innerHTML = ''; return; }
+
+    wrap.innerHTML = `
+      <div class="ing-header" style="margin-top:4px;">
+        <span>What's in it</span><span class="ing-hint">tap to correct</span>
+      </div>
+      <div class="ingredient-list" style="margin-bottom:14px;">
+        ${ings.map((ing,ii)=>`
+          <button class="ingredient-row" data-editing="${ii}">
+            <div class="ing-left">
+              <span class="ing-name">${escapeHtml(ing.name||'')}</span>
+              <span class="ing-weight">${ing.weight_g?Math.round(ing.weight_g)+'g':''}</span>
+            </div>
+            <div class="ing-right">
+              <span class="ing-cal">${Math.round(ing.calories||0)} kcal</span>
+              <span class="ing-edit">✎</span>
+            </div>
+          </button>`).join('')}
+      </div>`;
+
+    wrap.querySelectorAll('[data-editing]').forEach(btn=>{
+      btn.addEventListener('click', ()=> swapSavedIngredient(e, Number(btn.getAttribute('data-editing'))));
+    });
+  }
+
+  // Correct an ingredient on a meal that's already logged, then re-estimate it
+  // and rescale to the portion the user actually ate.
+  function swapSavedIngredient(entry, index){
+    const ing = (entry.ingredients||[])[index];
+    if(!ing) return;
+    const wrap = document.getElementById('editIngredients');
+    const modalBody = document.querySelector('#editEntryModal .modal');
+    const prev = modalBody.innerHTML;
+
+    modalBody.innerHTML = `
+      <div class="overlay-head">
+        <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+          <button class="t-back" id="swapBack" aria-label="Back">‹</button>
+          <div style="min-width:0;">
+            <h3 class="serif" style="margin:0; font-size:19px;">Correct this item</h3>
+            <div style="font-size:11.5px; color:var(--text-dim); margin-top:2px;">Logged as ${escapeHtml(ing.name||'')}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ob-field">
+        <label>What was it actually?</label>
+        <input type="text" id="swapName" placeholder="e.g. sour cream" autocapitalize="none">
+      </div>
+
+      <div class="portion-block" style="margin-top:6px;">
+        <div class="portion-label">Roughly how much?</div>
+        <div class="portion-row" style="grid-template-columns:38px 1fr 38px minmax(84px,1fr);">
+          <button class="portion-step" id="swapDown">−</button>
+          <input class="portion-qty" id="swapGrams" type="number" inputmode="numeric" value="${Math.round(ing.weight_g||30)}">
+          <button class="portion-step" id="swapUp">+</button>
+          <div style="font-size:12.5px; color:var(--text-dim); align-self:center;">grams</div>
+        </div>
+        <div class="portion-grams">Your portion size stays as it is.</div>
+      </div>
+
+      <div class="sheet-actions">
+        <button class="sheet-btn sheet-btn-ghost" id="swapCancel">Cancel</button>
+        <button class="sheet-btn sheet-btn-primary" id="swapApply">Update estimate</button>
+      </div>`;
+
+    const restore = ()=>{ modalBody.innerHTML = prev; rebindEditSheet(); openEditEntry(entry.id); };
+    document.getElementById('swapBack').addEventListener('click', restore);
+    document.getElementById('swapCancel').addEventListener('click', restore);
+    document.getElementById('swapUp').addEventListener('click', ()=>{
+      const el=document.getElementById('swapGrams'); el.value = Math.max(1,(Number(el.value)||0)+5);
+    });
+    document.getElementById('swapDown').addEventListener('click', ()=>{
+      const el=document.getElementById('swapGrams'); el.value = Math.max(1,(Number(el.value)||0)-5);
+    });
+    setTimeout(()=>{ const f=document.getElementById('swapName'); if(f) f.focus(); }, 60);
+
+    document.getElementById('swapApply').addEventListener('click', async ()=>{
+      const newName = document.getElementById('swapName').value.trim();
+      const grams = Number(document.getElementById('swapGrams').value) || Number(ing.weight_g) || 30;
+      if(!newName){ showToast('Type what it actually was first.'); return; }
+
+      modalBody.innerHTML = `<div style="text-align:center; padding:60px 20px;">
+        <div class="spinner" style="margin:0 auto 14px;"></div>
+        <div style="font-size:13px; color:var(--text-dim);">Re-estimating with ${escapeHtml(newName)}...</div></div>`;
+
+      try{
+        const text = await callClaude([{ role:'user', content:
+          `A logged meal called "${entry.name}" contains: ${(entry.ingredients||[]).map(x=>x.name).join(', ')}.
+
+One item was misidentified: what was recorded as "${ing.name}" is actually "${newName}", about ${grams}g.
+
+Re-estimate the WHOLE meal with that correction applied, keeping the other items as they are. Return totals for the full meal.` }],
+          ANALYSIS_SYSTEM, 1400, { json:true });
+
+        const revised = extractJson(text);
+        if(!revised || !revised.calories){
+          showToast("Couldn't re-estimate that — try different wording.");
+          restore(); return;
+        }
+
+        // keep the portion the user actually ate: scale the new estimate to their weight
+        const newBase = Number(revised.weight_g) || 0;
+        const eaten = Number(entry.weight_g) || 0;
+        const scale = (newBase > 0 && eaten > 0) ? (eaten / newBase) : 1;
+
+        entry.calories = Math.round((revised.calories||0) * scale);
+        entry.protein  = Math.round((revised.protein_g||0) * scale);
+        entry.carbs    = Math.round((revised.carbs_g||0) * scale);
+        entry.fat      = Math.round((revised.fat_g||0) * scale);
+        if(!eaten && newBase) entry.weight_g = Math.round(newBase);
+        entry.ingredients = Array.isArray(revised.ingredients) ? revised.ingredients : entry.ingredients;
+        if(revised.name && entry.name === ing.name) entry.name = revised.name;
+
+        await saveEntries();
+        render();
+        modalBody.innerHTML = prev;
+        rebindEditSheet();
+        openEditEntry(entry.id);
+        showToast(`Updated — now ${entry.calories} kcal.`);
+      }catch(err){
+        showToast((err&&err.message)||'That failed — try again.');
+        restore();
+      }
+    });
+  }
+
+  // the edit sheet's markup gets replaced during a swap, so its listeners need re-attaching
+  function rebindEditSheet(){
+    document.querySelectorAll('#editMealChips .meal-chip').forEach(c=>{
+      c.addEventListener('click', ()=>{
+        document.querySelectorAll('#editMealChips .meal-chip').forEach(x=>x.classList.remove('on'));
+        c.classList.add('on');
+      });
+    });
+    const close = document.getElementById('editClose');
+    if(close) close.addEventListener('click', closeEdit);
+    const save = document.getElementById('editSave');
+    if(save) save.addEventListener('click', saveEditedEntry);
+    const del = document.getElementById('editDelete');
+    if(del) del.addEventListener('click', deleteEditedEntry);
+  }
+
   function closeEdit(){
     document.getElementById('editEntryModal').classList.add('hidden');
     editingId = null;
@@ -4414,7 +4564,7 @@ Write week 1 of their training. Start conservatively enough that there is room t
     if(e.target.id === 'editEntryModal') closeEdit();
   });
 
-  document.getElementById('editSave').addEventListener('click', async ()=>{
+  async function saveEditedEntry(){
     const e = entries.find(x=>x.id===editingId);
     if(!e) return closeEdit();
     const cal = Number(document.getElementById('editCal').value)||0;
@@ -4431,9 +4581,9 @@ Write week 1 of their training. Start conservatively enough that there is room t
     render();
     closeEdit();
     showToast('Entry updated.');
-  });
+  }
 
-  document.getElementById('editDelete').addEventListener('click', async ()=>{
+  async function deleteEditedEntry(){
     const e = entries.find(x=>x.id===editingId);
     if(!e) return closeEdit();
     if(!await askConfirm('Delete this entry?', `${e.name} will be removed from today's log.`, 'Delete')) return;
@@ -4442,7 +4592,10 @@ Write week 1 of their training. Start conservatively enough that there is room t
     render();
     closeEdit();
     showToast('Entry deleted.');
-  });
+  }
+
+  document.getElementById('editSave').addEventListener('click', saveEditedEntry);
+  document.getElementById('editDelete').addEventListener('click', deleteEditedEntry);
 
   // ================= INIT =================
   loadAll();
