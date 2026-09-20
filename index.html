@@ -686,6 +686,59 @@
   .ing-edit{font-size:12px; color:var(--text-faint);}
   .ingredient-row:active .ing-edit{color:var(--red);}
 
+
+  /* ---- overlay headers: close is always in reach ---- */
+  .overlay-head{
+    position:sticky; top:0; z-index:6;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:2px 0 14px; margin-bottom:2px;
+    background:var(--bg-elev);
+  }
+  .overlay-head::after{
+    content:''; position:absolute; left:0; right:0; bottom:0; height:1px;
+    background:var(--hairline);
+  }
+  .overlay-x{
+    width:34px; height:34px; flex-shrink:0; border-radius:50%;
+    background:var(--bg-elev-2); border:1px solid var(--hairline-strong);
+    color:var(--text-dim); font-size:13px; cursor:pointer; line-height:1; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .09s var(--ease), background-color .15s ease, color .15s ease;
+  }
+  .overlay-x:active{transform:scale(0.92); background:var(--red-soft); color:var(--red);}
+
+  /* the handle is a grab affordance, so make it obviously draggable-looking */
+  .sheet-handle{cursor:grab;}
+
+
+  /* ---- iOS zooms the viewport on any input under 16px. Never let that happen. ---- */
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="search"], textarea{
+    font-size:16px;
+  }
+  /* keep the visual scale where a smaller look matters, using transform not font-size */
+  .portion-unit{ font-size:13px; padding-right:30px; text-overflow:ellipsis; }
+  .t-setinput{ font-size:16px; }
+  .chat-input-row input{ font-size:16px; }
+  .settings-field-row input, .field input, .weight-log-row input{ font-size:16px; }
+  .ob-field input{ font-size:22px; }
+
+  /* ---- custom confirm: no jarring browser alert ---- */
+  .confirm-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:120;
+    display:flex; align-items:center; justify-content:center; padding:26px;
+    animation:screenIn .18s var(--ease) both;
+  }
+  .confirm-box{
+    background:var(--bg-elev); border:1px solid var(--hairline-strong);
+    border-radius:var(--r-panel); padding:20px 18px 16px; width:100%; max-width:330px;
+    box-shadow:0 24px 60px -20px rgba(0,0,0,.9);
+  }
+  .confirm-title{font-size:16px; font-weight:600; margin-bottom:7px;}
+  .confirm-body{font-size:13px; color:var(--text-dim); line-height:1.55; margin-bottom:18px;}
+  .confirm-actions{display:flex; gap:9px;}
+  .confirm-actions button{flex:1;}
+
   ::-webkit-scrollbar{height:0px; width:0px;}
 </style>
 </head>
@@ -861,7 +914,10 @@
 <div class="sheet-overlay hidden" id="mealSheet">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <div class="sheet-title serif">Add a meal</div>
+    <div class="overlay-head">
+      <div class="sheet-title serif" style="margin:0;">Add a meal</div>
+      <button class="overlay-x" id="sheetClose" aria-label="Close">✕</button>
+    </div>
     <div class="mode-toggle" id="modeToggle">
       <button data-mode="photo" class="active">Photo</button>
       <button data-mode="describe">Describe</button>
@@ -908,14 +964,17 @@
       </div>
     </div>
 
-    <button class="edit-toggle-link" id="closeSheetLink" style="margin-top:16px;">Close</button>
+
   </div>
 </div>
 
 <!-- ===================== SETTINGS MODAL ===================== -->
 <div class="modal-overlay hidden" id="settingsModal">
   <div class="modal">
-    <h3 class="serif">Settings</h3>
+    <div class="overlay-head">
+      <h3 class="serif" style="margin:0;">Settings</h3>
+      <button class="overlay-x" id="settingsClose" aria-label="Close">✕</button>
+    </div>
 
     <div class="modal-sub">Daily targets</div>
     <div class="settings-field-row">
@@ -994,7 +1053,10 @@
 <!-- ===================== PAYWALL MODAL ===================== -->
 <div class="modal-overlay hidden" id="paywallModal">
   <div class="modal">
-    <h3 class="serif">Redline Premium</h3>
+    <div class="overlay-head">
+      <h3 class="serif" style="margin:0;">Redline Premium</h3>
+      <button class="overlay-x" id="paywallClose" aria-label="Close">✕</button>
+    </div>
     <div class="modal-sub" id="paywallReason" style="color:var(--text); font-size:13px;"></div>
     <div style="margin:16px 0; display:flex; flex-direction:column; gap:10px;">
       <div class="toggle-row"><div class="t-label">Unlimited AI photo &amp; text scans</div></div>
@@ -1013,7 +1075,10 @@
 <!-- ===================== TRUST / HOW WE ESTIMATE MODAL ===================== -->
 <div class="modal-overlay hidden" id="trustModal">
   <div class="modal">
-    <h3 class="serif">How we estimate this</h3>
+    <div class="overlay-head">
+      <h3 class="serif" style="margin:0;">How we estimate this</h3>
+      <button class="overlay-x" id="trustClose" aria-label="Close">✕</button>
+    </div>
     <div style="font-size:13px; color:var(--text-dim); line-height:1.6;">
       <p>A single photo or description is an estimate, not a lab measurement — we're upfront about that rather than pretending otherwise.</p>
       <p>Confidence is scored honestly: composite dishes with hidden ingredients (soups, casseroles, sauces), packaged food with an unreadable label, and photos with no size reference all get marked lower confidence on purpose.</p>
@@ -1066,7 +1131,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -2519,7 +2584,6 @@ If — and only if — the user describes a specific meal or food they ate or wa
     document.getElementById('describeMode').classList.toggle('hidden', mode!=='describe');
   }
   document.getElementById('addMealBtn').addEventListener('click', openSheet);
-  document.getElementById('closeSheetLink').addEventListener('click', closeSheet);
   document.querySelectorAll('#modeToggle button').forEach(b=>{
     b.addEventListener('click', ()=>setSheetMode(b.getAttribute('data-mode')));
   });
@@ -3541,7 +3605,9 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
     const backArrow = document.getElementById('tqBackArrow');
     if(backArrow) backArrow.addEventListener('click', ()=>{ captureTQ(); tqStep--; renderTrainQuestion(); });
     const exit = document.getElementById('tqExit');
-    if(exit) exit.addEventListener('click', ()=>{ if(confirm('Leave setup? Your answers so far will be lost.')) renderTrain(); });
+    if(exit) exit.addEventListener('click', async ()=>{
+      if(await askConfirm('Leave setup?', 'Your answers so far will be lost.', 'Leave')) renderTrain();
+    });
     const skip = document.getElementById('tqSkip');
     if(skip) skip.addEventListener('click', ()=>{ captureTQ(); advanceTQ(); });
 
@@ -3826,7 +3892,7 @@ Write week 1 of their training. Start conservatively enough that there is room t
       el.addEventListener('click', ()=>openSession(Number(el.getAttribute('data-day'))));
     });
     document.getElementById('regenWeek').addEventListener('click', async ()=>{
-      if(!confirm('Rebuild this week from scratch? Sets you have logged stay saved.')) return;
+      if(!await askConfirm('Rebuild this week?', 'A fresh week will be written. Sets you have already logged stay saved.', 'Rebuild')) return;
       trainingPlan = null; await saveTraining();
       renderGenerating(body, false);
     });
@@ -4100,10 +4166,66 @@ Write week 1 of their training. Start conservatively enough that there is room t
     renderTrain();
   }
 
-  document.getElementById('trainSettingsBtn').addEventListener('click', ()=>{
+  document.getElementById('trainSettingsBtn').addEventListener('click', async ()=>{
     if(!trainingProfile){ openSettings(); return; }
-    if(confirm('Start over? This clears your training profile, plan and logged sets.')) resetTraining();
+    if(await askConfirm('Start training over?', 'This clears your training profile, current plan and every logged set.', 'Start over')) resetTraining();
   });
+
+  // Replaces window.confirm, which renders as an ugly native alert on iOS.
+  function askConfirm(title, body, confirmLabel){
+    return new Promise(resolve=>{
+      const el = document.createElement('div');
+      el.className = 'confirm-overlay';
+      el.innerHTML = `
+        <div class="confirm-box">
+          <div class="confirm-title">${escapeHtml(title)}</div>
+          <div class="confirm-body">${escapeHtml(body||'')}</div>
+          <div class="confirm-actions">
+            <button class="sheet-btn sheet-btn-ghost" data-a="no">Cancel</button>
+            <button class="sheet-btn sheet-btn-primary" data-a="yes">${escapeHtml(confirmLabel||'Confirm')}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(el);
+      const done = v => { el.remove(); resolve(v); };
+      el.querySelector('[data-a="yes"]').addEventListener('click', ()=>done(true));
+      el.querySelector('[data-a="no"]').addEventListener('click', ()=>done(false));
+      el.addEventListener('click', e=>{ if(e.target===el) done(false); });
+    });
+  }
+
+  // ---- overlay dismissal: X, backdrop tap, and Escape all work everywhere ----
+  (function wireOverlayDismissal(){
+    const map = [
+      ['sheetClose',   ()=>closeSheet()],
+      ['settingsClose',()=>document.getElementById('settingsModal').classList.add('hidden')],
+      ['trustClose',   ()=>document.getElementById('trustModal').classList.add('hidden')],
+      ['paywallClose', ()=>document.getElementById('paywallModal').classList.add('hidden')]
+    ];
+    map.forEach(([id, fn])=>{
+      const el = document.getElementById(id);
+      if(el) el.addEventListener('click', fn);
+    });
+
+    // tapping the dimmed backdrop closes, tapping the panel itself does not
+    [['mealSheet', ()=>closeSheet()],
+     ['settingsModal', ()=>document.getElementById('settingsModal').classList.add('hidden')],
+     ['trustModal', ()=>document.getElementById('trustModal').classList.add('hidden')],
+     ['paywallModal', ()=>document.getElementById('paywallModal').classList.add('hidden')]
+    ].forEach(([id, fn])=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.addEventListener('click', (e)=>{ if(e.target === el) fn(); });
+    });
+
+    document.addEventListener('keydown', (e)=>{
+      if(e.key !== 'Escape') return;
+      const open = ['trustModal','paywallModal','settingsModal','mealSheet']
+        .map(id=>document.getElementById(id))
+        .find(el=>el && !el.classList.contains('hidden'));
+      if(!open) return;
+      if(open.id === 'mealSheet') closeSheet(); else open.classList.add('hidden');
+    });
+  })();
 
   // ================= INIT =================
   loadAll();
