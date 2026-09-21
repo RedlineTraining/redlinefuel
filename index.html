@@ -896,10 +896,31 @@
 
   /* a sticky footer inside a scroll area measures from that area's bottom,
      which already sits above the tab bar */
-  .t-sticky-footer{ bottom:8px !important; }
+  /* A docked action bar, flush against the tab bar with a solid background,
+     so nothing can show through or peek out underneath it. The negative
+     margins let it span the full width and eat the screen's bottom padding,
+     so it sits flush whether you're at the top or the end of the session. */
+  .t-sticky-footer{
+    position:sticky !important; bottom:0 !important; z-index:7;
+    margin:18px -18px 0 !important;
+    padding:12px 18px 14px !important;
+    background:var(--bg) !important;
+    border-top:1px solid var(--hairline);
+  }
+  /* a soft fade above the bar, so content dissolves into it rather than being chopped */
+  .t-sticky-footer::before{
+    content:''; position:absolute; left:0; right:0; bottom:100%; height:22px;
+    background:linear-gradient(to top, var(--bg), transparent);
+    pointer-events:none;
+  }
 
   /* ---- Train: title, gear and the week summary stay locked at the top ---- */
-  #trainScreen{ padding-top:0; }
+  /* Sticky offsets are measured inside the scroll area's padding, so a bottom
+     padding here would always leave a gap under the finish bar. The breathing
+     room moves onto the content instead, and drops away when the bar is there. */
+  #trainScreen{ padding-top:0; padding-bottom:0 !important; }
+  #trainBody{ padding-bottom:28px; }
+  #trainBody:has(> .t-sticky-footer){ padding-bottom:0; }
   #trainScreen > .top-row{
     position:sticky; top:0; z-index:9;
     height:66px; box-sizing:border-box;
@@ -915,6 +936,127 @@
   }
   .t-sticky-head .t-header{ margin-bottom:10px; }
   .t-sticky-head .t-progress-bar{ margin-bottom:0; }
+
+
+  /* ================= iPHONE HARDENING =================
+     Audit results: no JS errors, no overflow, no zoom inputs. The failures
+     were tap targets under Apple's 44pt minimum, bottom sheets sitting in the
+     home-indicator swipe zone, and a banner under the notch. */
+
+  /* ---- global touch behaviour ---- */
+  html{
+    -webkit-text-size-adjust:100%;          /* stop iOS resizing text on rotate */
+    touch-action:manipulation;              /* kill double-tap-to-zoom delay */
+  }
+  *{ -webkit-tap-highlight-color:transparent; }   /* no grey flash on tap */
+  button, .ob-choice, .t-daycard, .meal-row, .ingredient-row, .switch,
+  .meal-chip, .rpe-chip, .plan-chip, .tab-btn{
+    -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none;             /* no long-press magnifier on controls */
+  }
+
+  /* ---- invisible hit-area expansion: controls keep their look,
+          but the tappable area grows to at least 44x44 ---- */
+  .icon-btn, .overlay-x, .t-back, .mg-add, .t-setdel, .portion-step,
+  .plan-forget, .meal-del, .wm-stepper button, .edit-toggle-link{
+    position:relative;
+  }
+  .icon-btn::after, .overlay-x::after, .t-back::after, .mg-add::after,
+  .t-setdel::after, .portion-step::after, .plan-forget::after,
+  .meal-del::after, .wm-stepper button::after{
+    content:''; position:absolute; top:50%; left:50%;
+    width:max(100%, 44px); height:max(100%, 44px);
+    transform:translate(-50%,-50%);
+  }
+  .edit-toggle-link::after{
+    content:''; position:absolute; left:-6px; right:-6px; top:-16px; bottom:-16px;
+  }
+
+  /* ---- controls that should simply be bigger ---- */
+  .icon-btn, .overlay-x{ width:40px; height:40px; }
+  .t-back{ width:40px; height:40px; }
+  .mg-add{ width:32px; height:32px; }
+  .wm-stepper button{ width:36px; height:36px; font-size:16px; }
+  .wm-stepper{ gap:14px; margin-top:10px; }
+
+  .t-setinput{ height:44px; }
+  .t-setrow{ grid-template-columns:22px 1fr 1fr 52px 36px; }
+  .t-sethead{ grid-template-columns:22px 1fr 1fr 52px 36px; }
+  .t-setdel{ width:36px; height:44px; }
+  .t-addset{ min-height:44px; }
+
+  .meal-chip{ min-height:44px; }
+  .ingredient-row{ min-height:44px; }
+  .meal-row{ min-height:52px; }
+  .mode-toggle button{ min-height:44px; }
+  /* the meal name after a scan is editable — give it a real touch height */
+  .result-name-input{ min-height:44px; padding:6px 0 !important; }
+  .result-name-row{ align-items:center; }
+  .portion-step, .portion-qty, .portion-unit{ height:44px; }
+
+  .settings-field-row input, .weight-log-row input{ min-height:46px; }
+  .weight-log-row button{ min-height:44px; padding:0 18px; }
+  .ob-field input{ min-height:44px; }
+  .widget-mini .wm-val{ min-height:36px; }
+
+  /* RPE: ten 31px chips were too small to hit reliably — two rows of five */
+  .rpe-row{ grid-template-columns:repeat(5,1fr); gap:6px; }
+  .rpe-chip{ min-height:44px; font-size:14px; }
+
+  /* switches at native iOS size; the whole row is tappable (wired in JS) */
+  .switch{ width:51px; height:31px; border-radius:16px; }
+  .switch::after{ width:27px; height:27px; top:1px; left:1px; }
+  .switch.on::after{ left:21px; }
+  .toggle-row, .burn-toggle{ cursor:pointer; min-height:52px; }
+
+  /* edit fields: tapping anywhere on the box focuses the number */
+  .edit-field, .result-field{ cursor:text; min-height:58px; }
+  .edit-field input, .result-field input{ min-height:24px; }
+
+  /* ---- bottom sheets clear the home indicator and the notch ---- */
+  .sheet, .modal{
+    padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+    max-height:calc(100dvh - env(safe-area-inset-top, 0px) - 16px) !important;
+  }
+  .confirm-overlay{
+    padding-top:calc(26px + env(safe-area-inset-top, 0px));
+    padding-bottom:calc(26px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ---- the storage banner sits below the notch, not under it ---- */
+  #storageWarning{ top:env(safe-area-inset-top, 0px) !important; }
+
+  /* landscape iPhone: keep content clear of the side notch */
+  @supports(padding:max(0px)){
+    .screen{ padding-left:max(18px, env(safe-area-inset-left)); padding-right:max(18px, env(safe-area-inset-right)); }
+  }
+
+
+  /* ---- sheet/modal headers: cover the scroll padding so nothing peeks above ---- */
+  .sheet > .overlay-head{ top:-18px; margin-top:-18px; padding-top:18px; }
+  .modal > .overlay-head{ top:-20px; margin-top:-20px; padding-top:20px; }
+  .overlay-head{ margin-bottom:16px !important; }
+  .sheet-handle{ position:relative; z-index:7; }
+
+  /* helper text inside sheets and modals was falling back to body size */
+  .modal .t-sub, .sheet .t-sub{ font-size:11.5px; color:var(--text-dim); line-height:1.5; }
+  .modal .t-label, .sheet .t-label{ font-size:13.5px; font-weight:600; color:var(--text); }
+
+  /* long meal names end cleanly instead of being chopped */
+  .result-name-input{ text-overflow:ellipsis; overflow:hidden; white-space:nowrap; min-width:0; flex:1; }
+  .result-name-row .confidence-pill{ flex-shrink:0; }
+
+
+  /* ---- iPhone keyboard: everything anchored to the bottom rises above it ---- */
+  body.kb-open .tab-bar{ display:none; }                 /* the keyboard covers it anyway */
+  body.kb-open .screen{ bottom:var(--kb, 0px) !important; }
+  body.kb-open #coachScreen{ bottom:calc(var(--kb, 0px) + var(--chatbar-h)) !important; }
+  body.kb-open #chatInputRow{ bottom:var(--kb, 0px) !important; }
+  body.kb-open .sheet-overlay, body.kb-open .modal-overlay{ bottom:var(--kb, 0px) !important; }
+  body.kb-open .sheet, body.kb-open .modal{
+    max-height:calc(var(--vvh, 100dvh) - env(safe-area-inset-top, 0px) - 8px) !important;
+    padding-bottom:16px !important;            /* home indicator is under the keyboard now */
+  }
 
   ::-webkit-scrollbar{height:0px; width:0px;}
 </style>
@@ -935,11 +1077,11 @@
 
       <div class="ob-field">
         <label>Email</label>
-        <input type="email" id="authEmail" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@email.com">
+        <input type="email" id="authEmail" autocomplete="email" enterkeyhint="next" autocapitalize="none" spellcheck="false" placeholder="you@email.com">
       </div>
       <div class="ob-field">
         <label>Password</label>
-        <input type="password" id="authPassword" autocomplete="current-password" placeholder="At least 6 characters">
+        <input type="password" id="authPassword" autocomplete="current-password" enterkeyhint="go" placeholder="At least 6 characters">
       </div>
 
       <div id="authError" style="font-size:12px; color:var(--red); min-height:18px; margin-bottom:10px; line-height:1.4;"></div>
@@ -1044,7 +1186,7 @@
         <div class="weight-log-row">
           <div class="field">
             <label id="weightUnitLabel">Today's weight (lb)</label>
-            <input type="number" step="0.1" id="weightInput" placeholder="—">
+            <input type="number" step="0.1" id="weightInput" placeholder="—" inputmode="decimal">
           </div>
           <button id="logWeightBtn">Log</button>
         </div>
@@ -1066,7 +1208,7 @@
         </div>
         <div class="widget-mini">
           <div class="wm-icon">🌙</div>
-          <input type="number" step="0.5" id="sleepInput" class="wm-val" style="background:none; border:none; color:var(--text); width:100%; text-align:center;" placeholder="—">
+          <input type="number" step="0.5" id="sleepInput" class="wm-val" style="background:none; border:none; color:var(--text); width:100%; text-align:center;" placeholder="—" inputmode="decimal">
           <div class="wm-lbl">hrs sleep · goal <span id="sleepGoalLbl">8</span></div>
         </div>
       </div>
@@ -1088,7 +1230,7 @@
     </div>
 
     <div id="chatInputRow" class="chat-input-row hidden">
-      <input type="text" id="chatInput" placeholder="Ask your coach or describe a meal...">
+      <input type="text" id="chatInput" enterkeyhint="send" autocomplete="off" placeholder="Ask your coach or describe a meal...">
       <button class="chat-send" id="chatSend">↑</button>
     </div>
   </div>
@@ -1138,10 +1280,10 @@
     <div class="manual-fields hidden" id="manualFields">
       <div class="edit-grid">
         <div class="edit-field" style="grid-column:1/-1;"><label>Name</label><input type="text" id="manName" placeholder="Food name"></div>
-        <div class="edit-field"><label>Calories</label><input type="number" id="manCal" placeholder="0"></div>
-        <div class="edit-field"><label>Protein (g)</label><input type="number" id="manProtein" placeholder="0"></div>
-        <div class="edit-field"><label>Carbs (g)</label><input type="number" id="manCarbs" placeholder="0"></div>
-        <div class="edit-field"><label>Fat (g)</label><input type="number" id="manFat" placeholder="0"></div>
+        <div class="edit-field"><label>Calories</label><input type="number" id="manCal" placeholder="0" inputmode="numeric"></div>
+        <div class="edit-field"><label>Protein (g)</label><input type="number" id="manProtein" placeholder="0" inputmode="numeric"></div>
+        <div class="edit-field"><label>Carbs (g)</label><input type="number" id="manCarbs" placeholder="0" inputmode="numeric"></div>
+        <div class="edit-field"><label>Fat (g)</label><input type="number" id="manFat" placeholder="0" inputmode="numeric"></div>
       </div>
       <div class="sheet-actions">
         <button class="sheet-btn sheet-btn-ghost" id="manCancel">Cancel</button>
@@ -1163,25 +1305,25 @@
 
     <div class="modal-sub">Daily targets</div>
     <div class="settings-field-row">
-      <div class="field"><label>Calories</label><input type="number" id="targetCal"></div>
+      <div class="field"><label>Calories</label><input type="number" id="targetCal" inputmode="numeric"></div>
     </div>
     <div class="settings-field-row">
-      <div class="field"><label>Protein (g)</label><input type="number" id="targetProtein"></div>
-      <div class="field"><label>Carbs (g)</label><input type="number" id="targetCarbs"></div>
-      <div class="field"><label>Fat (g)</label><input type="number" id="targetFat"></div>
+      <div class="field"><label>Protein (g)</label><input type="number" id="targetProtein" inputmode="numeric"></div>
+      <div class="field"><label>Carbs (g)</label><input type="number" id="targetCarbs" inputmode="numeric"></div>
+      <div class="field"><label>Fat (g)</label><input type="number" id="targetFat" inputmode="numeric"></div>
     </div>
     <button class="edit-toggle-link" id="recalcBtn">Recalculate from my profile</button>
 
     <div class="modal-sub">Profile</div>
     <div class="settings-field-row">
-      <div class="field"><label>Weight (<span id="wUnitLbl">lb</span>)</label><input type="number" step="0.1" id="profWeight"></div>
+      <div class="field"><label>Weight (<span id="wUnitLbl">lb</span>)</label><input type="number" step="0.1" id="profWeight" inputmode="decimal"></div>
       <div class="field"><label>Activity level</label><input type="text" id="profActivityDisplay" disabled></div>
     </div>
     <button class="edit-toggle-link" id="editFullProfileBtn">Edit full profile</button>
 
     <div class="modal-sub">Sleep target</div>
     <div class="settings-field-row">
-      <div class="field"><label>Hours per night</label><input type="number" step="0.5" id="targetSleep"></div>
+      <div class="field"><label>Hours per night</label><input type="number" step="0.5" id="targetSleep" inputmode="decimal"></div>
     </div>
 
     <div class="modal-sub">Photo logging</div>
@@ -1220,7 +1362,7 @@
     <div class="t-sub" id="testConnResult" style="margin-bottom:6px; line-height:1.5; word-break:break-word;"></div>
 
     <div class="modal-sub">Backup &amp; restore</div>
-    <div class="t-sub" style="margin-bottom:10px; line-height:1.5;">If this device isn't saving automatically, download a backup before you leave and restore it next time — this works even when auto-save doesn't.</div>
+    <div class="t-sub" style="margin-bottom:10px; line-height:1.5;">Download a copy of your log and settings as a file, or restore one. Handy before switching phones or if you use offline mode.</div>
     <div class="sheet-actions" style="margin-bottom:4px;">
       <button class="sheet-btn sheet-btn-ghost" id="downloadBackupBtn">Download backup</button>
       <button class="sheet-btn sheet-btn-ghost" id="restoreBackupBtn">Restore backup</button>
@@ -1228,10 +1370,10 @@
     <input type="file" accept="application/json" id="restoreFileInput" class="hidden">
 
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="sheet-btn sheet-btn-ghost" id="closeSettings">Close</button>
-      <button class="sheet-btn sheet-btn-primary" id="saveSettings">Save</button>
+      <button class="sheet-btn sheet-btn-ghost hidden" id="closeSettings">Close</button>
+      <button class="sheet-btn sheet-btn-primary" id="saveSettings" style="width:100%;">Save changes</button>
     </div>
-    <div style="font-size:10.5px; color:var(--text-faint); margin-top:14px; line-height:1.5;">Your account and log are saved right here in this app when auto-save is working. Reopen it from this same chat to pick up where you left off — downloading or sharing the file elsewhere starts fresh.</div>
+    <div style="font-size:10.5px; color:var(--text-faint); margin-top:14px; line-height:1.5;">Signed in, everything syncs to your account and appears on any device you log in from. Backups are a spare copy, useful if you ever use offline mode.</div>
   </div>
 </div>
 
@@ -1253,7 +1395,7 @@
       <button class="sheet-btn sheet-btn-ghost" id="paywallLater">Maybe later</button>
       <button class="sheet-btn sheet-btn-primary" id="paywallUpgrade">Start 7-day free trial</button>
     </div>
-    <div style="font-size:10.5px; color:var(--text-faint); margin-top:12px; line-height:1.5;">This is a working prototype — upgrading here simulates Premium in the app's own memory and doesn't process a real payment.</div>
+    <div style="font-size:10.5px; color:var(--text-faint); margin-top:12px; line-height:1.5;">Payments aren't live yet. Starting a trial unlocks Premium on this account for testing, and no card is charged.</div>
   </div>
 </div>
 
@@ -1298,11 +1440,11 @@
     <div id="editIngredients"></div>
 
     <div class="edit-grid">
-      <div class="edit-field"><label>Calories</label><input type="number" id="editCal"></div>
-      <div class="edit-field"><label>Weight (g)</label><input type="number" id="editWeight"></div>
-      <div class="edit-field"><label>Protein (g)</label><input type="number" id="editProtein"></div>
-      <div class="edit-field"><label>Carbs (g)</label><input type="number" id="editCarbs"></div>
-      <div class="edit-field" style="grid-column:1/-1;"><label>Fat (g)</label><input type="number" id="editFat"></div>
+      <div class="edit-field"><label>Calories</label><input type="number" id="editCal" inputmode="numeric"></div>
+      <div class="edit-field"><label>Weight (g)</label><input type="number" id="editWeight" inputmode="decimal"></div>
+      <div class="edit-field"><label>Protein (g)</label><input type="number" id="editProtein" inputmode="decimal"></div>
+      <div class="edit-field"><label>Carbs (g)</label><input type="number" id="editCarbs" inputmode="decimal"></div>
+      <div class="edit-field" style="grid-column:1/-1;"><label>Fat (g)</label><input type="number" id="editFat" inputmode="decimal"></div>
     </div>
 
     <div class="sheet-actions" style="margin-top:16px;">
@@ -1363,7 +1505,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -1734,7 +1876,7 @@
     await saveSettings();
     document.getElementById('paywallModal').classList.add('hidden');
     updatePlanDisplay();
-    showToast('Premium activated (prototype) — no real payment was processed.');
+    showToast('Premium unlocked for testing. No payment taken.');
   });
   document.getElementById('closeTrustModal').addEventListener('click', ()=>document.getElementById('trustModal').classList.add('hidden'));
   function updateAccountDisplay(){
@@ -1799,7 +1941,7 @@
   function updatePlanDisplay(){
     const isPremium = settings.plan === 'premium';
     document.getElementById('planLabel').textContent = isPremium ? 'Premium' : 'Free plan';
-    document.getElementById('planSub').textContent = isPremium ? 'Unlimited scans & coaching, active (prototype)' : '5 AI scans · 10 coach messages per month';
+    document.getElementById('planSub').textContent = isPremium ? 'Unlimited scans and coaching' : '5 AI scans · 10 coach messages per month';
     document.getElementById('managePlanBtn').textContent = isPremium ? 'Downgrade' : 'Upgrade';
   }
   document.getElementById('managePlanBtn').addEventListener('click', async ()=>{
@@ -3130,6 +3272,7 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
     const ingredients = Array.isArray(result.ingredients) ? result.ingredients : [];
     const confClass = (result.confidence||'medium').toLowerCase();
     const units = buildUnits(result);
+    document.getElementById('toggleManualEntry').classList.add('hidden');   // result card has its own
 
     // baseline: macros per gram, taken from the full estimate
     const baseG = Number(result.weight_g) || units[0].grams || 100;
@@ -3208,11 +3351,11 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
 
         <button class="edit-toggle-link" id="adjustNumbersLink" style="margin-top:10px;">Enter exact numbers instead</button>
         <div class="edit-grid hidden" id="adjustGrid">
-          <div class="edit-field"><label>Weight (g)</label><input type="number" id="resWeight"></div>
-          <div class="edit-field"><label>Calories</label><input type="number" id="resCal"></div>
-          <div class="edit-field"><label>Protein (g)</label><input type="number" id="resProtein"></div>
-          <div class="edit-field"><label>Carbs (g)</label><input type="number" id="resCarbs"></div>
-          <div class="edit-field" style="grid-column:1/-1;"><label>Fat (g)</label><input type="number" id="resFat"></div>
+          <div class="edit-field"><label>Weight (g)</label><input type="number" id="resWeight" inputmode="numeric"></div>
+          <div class="edit-field"><label>Calories</label><input type="number" id="resCal" inputmode="numeric"></div>
+          <div class="edit-field"><label>Protein (g)</label><input type="number" id="resProtein" inputmode="numeric"></div>
+          <div class="edit-field"><label>Carbs (g)</label><input type="number" id="resCarbs" inputmode="numeric"></div>
+          <div class="edit-field" style="grid-column:1/-1;"><label>Fat (g)</label><input type="number" id="resFat" inputmode="numeric"></div>
         </div>
 
         <div class="sheet-actions">
@@ -3421,10 +3564,13 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
     scroll.appendChild(el); scroll.scrollTop = scroll.scrollHeight;
   }
   function removeTyping(){ const el=document.getElementById('typingRow'); if(el) el.remove(); }
+  let chatSending = false;
   async function submitChat(){
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
-    if(!text) return;
+    if(!text || chatSending) return;
+    chatSending = true;
+    setTimeout(()=>{ chatSending = false; }, 900);
     if(!(settings.apiKey && settings.apiKey.trim()) && !(sb && currentUser)){
       showToast('Sign in to use the coach, or add your own API key in Settings.');
       openSettings();
@@ -4250,7 +4396,7 @@ Write week 1 of their training. Start conservatively enough that there is room t
             .map(t=>`<button class="plan-chip" data-suggest="${t}">${t}</button>`).join('')}
         </div>
         <div class="plan-input-row">
-          <input type="text" id="planAsk" placeholder="e.g. I want more back work and supersets">
+          <input type="text" id="planAsk" enterkeyhint="send" autocomplete="off" placeholder="e.g. I want more back work and supersets">
           <button class="chat-send" id="planAskSend" aria-label="Send">↑</button>
         </div>
         ${(trainingProfile.requests||[]).length ? `
@@ -5089,6 +5235,83 @@ Respond with ONLY JSON, no markdown fences:
   document.getElementById('burnModal').addEventListener('click', e=>{
     if(e.target.id === 'burnModal') closeBurn();
   });
+
+  // Tapping anywhere on a settings row flips its switch (the iOS pattern),
+  // and tapping anywhere on a number box focuses the number.
+  document.addEventListener('click', (e)=>{
+    const row = e.target.closest('.toggle-row, .burn-toggle');
+    if(row && !e.target.closest('.switch, button, input, a')){
+      const sw = row.querySelector('.switch');
+      if(sw) sw.click();
+      return;
+    }
+    const field = e.target.closest('.edit-field, .result-field');
+    if(field && e.target.tagName !== 'INPUT'){
+      const inp = field.querySelector('input');
+      if(inp){ inp.focus(); try{ inp.select(); }catch(_){} }
+    }
+  });
+
+  // Keep the focused field visible when the iPhone keyboard opens inside a sheet.
+  document.addEventListener('focusin', (e)=>{
+    const el = e.target;
+    if(!(el.matches && el.matches('input, textarea, select'))) return;
+    if(!el.closest('.sheet, .modal')) return;
+    setTimeout(()=>{ try{ el.scrollIntoView({ block:'center', behavior:'smooth' }); }catch(_){} }, 300);
+  });
+
+  // The page doesn't scroll (that's what keeps the tab bar still), so iOS can't
+  // push a focused input above the keyboard itself. Measure the keyboard with the
+  // Visual Viewport API and lift everything anchored to the bottom above it.
+  function applyKeyboard(kbPx, visibleHeight){
+    const root = document.documentElement;
+    const open = kbPx > 80;                      // ignore toolbar wobble
+    document.body.classList.toggle('kb-open', open);
+    root.style.setProperty('--kb', open ? Math.round(kbPx) + 'px' : '0px');
+    if(visibleHeight) root.style.setProperty('--vvh', Math.round(visibleHeight) + 'px');
+    if(open){
+      const coach = document.getElementById('coachScreen');
+      if(coach && !coach.classList.contains('hidden')) scrollChatToLatest();
+    }
+  }
+  if(window.visualViewport){
+    const vv = window.visualViewport;
+    const measure = ()=>{
+      const kb = window.innerHeight - vv.height - vv.offsetTop;
+      applyKeyboard(Math.max(0, kb), vv.height);
+    };
+    vv.addEventListener('resize', measure);
+    vv.addEventListener('scroll', measure);
+  }
+  // make sure a focused field inside a screen ends up in view above the keyboard
+  document.addEventListener('focusin', (e)=>{
+    const el = e.target;
+    if(!(el.matches && el.matches('input, textarea'))) return;
+    if(!el.closest('.screen') || el.closest('#chatInputRow')) return;
+    setTimeout(()=>{ try{ el.scrollIntoView({ block:'center', behavior:'smooth' }); }catch(_){} }, 320);
+  });
+
+  // Double-tap guard. Buttons that commit something (log, save, send, estimate)
+  // ignore a second tap on the same button within 800ms, so a quick double tap
+  // can't log a meal twice or send a message twice. Runs in the capture phase,
+  // before any button's own handler.
+  (function guardDoubleTaps(){
+    const COMMIT = [
+      '#resConfirm','#chatSend','#manSubmit','#describeSubmit','#editSave','#editDelete',
+      '#burnEstimate','#burnDelete','#planAskSend','#finishSession','#approvePlan','#rejectPlan',
+      '#applyTweak','#fixApply','#swapApply','#logWeightBtn','#saveSettings','#authSubmitBtn',
+      '#nextWeekBtn','#regenWeek','.log-suggest-btn','[data-addset]','[data-delset]','.mg-add',
+      '#addMealBtn','#addBurnBtn','#paywallUpgrade','#downloadBackupBtn'
+    ].join(',');
+    const last = new WeakMap();
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest(COMMIT);
+      if(!btn) return;
+      const now = Date.now(), prev = last.get(btn) || 0;
+      if(now - prev < 800){ e.stopImmediatePropagation(); e.preventDefault(); return; }
+      last.set(btn, now);
+    }, true);
+  })();
 
   // ================= INIT =================
   loadAll();
