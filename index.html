@@ -628,7 +628,6 @@
   }
 
   /* ---- spacing rhythm ---- */
-  .screen{ padding:20px 18px calc(var(--tabbar-h) + 28px); }
   .t-exercise{ padding:16px 15px 14px; margin-bottom:11px; }
   .t-header{ margin-bottom:16px; }
   .macro-row{ padding:11px 0; }
@@ -864,6 +863,58 @@
     cursor:pointer; padding:4px 6px; border-radius:6px;
   }
   .plan-forget:active{color:var(--red); background:var(--red-soft);}
+
+
+  /* ============ SCROLL ARCHITECTURE ============
+     The page itself never scrolls. Every screen is its own scroll area pinned
+     between the notch and the tab bar. When the whole document scrolled, iOS
+     rubber-banded the entire viewport at the top/bottom edge and dragged the
+     "fixed" tab bar with it. With nothing at document level to scroll, there
+     is nothing to rubber-band. */
+  html, body{
+    height:100%; overflow:hidden;
+    overscroll-behavior:none;
+  }
+  .screen{
+    position:fixed; left:0; right:0; margin:0 auto; max-width:460px;
+    top:env(safe-area-inset-top, 0px);
+    bottom:var(--tabbar-h);
+    overflow-y:auto; overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding:20px 18px 28px;
+  }
+  #coachScreen{ overflow:hidden; }   /* its chat list is the scroller */
+
+  /* sign-in and setup live outside the tab screens, so they scroll the same way */
+  #authView:not(.hidden), #onboardingView:not(.hidden){
+    position:fixed; left:0; right:0; margin:0 auto; max-width:460px;
+    top:env(safe-area-inset-top, 0px); bottom:0;
+    overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+    min-height:0 !important;
+  }
+
+  /* a sticky footer inside a scroll area measures from that area's bottom,
+     which already sits above the tab bar */
+  .t-sticky-footer{ bottom:8px !important; }
+
+  /* ---- Train: title, gear and the week summary stay locked at the top ---- */
+  #trainScreen{ padding-top:0; }
+  #trainScreen > .top-row{
+    position:sticky; top:0; z-index:9;
+    height:66px; box-sizing:border-box;
+    margin:0 -18px; padding:20px 18px 12px;
+    background:var(--bg);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .t-sticky-head{
+    position:sticky; top:66px; z-index:8;
+    margin:0 -18px 14px; padding:2px 18px 12px;
+    background:var(--bg);
+    box-shadow:0 1px 0 var(--hairline);
+  }
+  .t-sticky-head .t-header{ margin-bottom:10px; }
+  .t-sticky-head .t-progress-bar{ margin-bottom:0; }
 
   ::-webkit-scrollbar{height:0px; width:0px;}
 </style>
@@ -1312,7 +1363,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -3704,7 +3755,13 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
   }
 
   // ---------- router ----------
+  function resetTrainScroll(){
+    const sc = document.getElementById('trainScreen');
+    if(sc) sc.scrollTop = 0;
+  }
+
   function renderTrain(){
+    resetTrainScroll();
     const body = document.getElementById('trainBody');
     if(!body) return;
     if(!trainingProfile){ renderTrainIntro(body); return; }
@@ -4154,6 +4211,7 @@ Write week 1 of their training. Start conservatively enough that there is room t
     const pct = total ? Math.round((doneCount/total)*100) : 0;
 
     body.innerHTML = `
+      <div class="t-sticky-head">
       <div class="t-header">
         <div class="t-header-text">
           <div class="t-title">Week ${wk}</div>
@@ -4163,6 +4221,7 @@ Write week 1 of their training. Start conservatively enough that there is room t
       </div>
 
       <div class="t-progress-bar"><div class="t-progress-fill" style="width:${pct}%"></div></div>
+      </div>
 
       ${plan.coachNote ? `<div class="t-coachnote"><span>${escapeHtml(plan.coachNote)}</span></div>` : ''}
 
@@ -4210,7 +4269,8 @@ Write week 1 of their training. Start conservatively enough that there is room t
       </div>`;
 
     body.querySelectorAll('[data-day]').forEach(el=>{
-      el.addEventListener('click', ()=>openSession(Number(el.getAttribute('data-day'))));
+      // reset only when entering a session; add/delete set re-renders keep your place
+      el.addEventListener('click', ()=>{ openSession(Number(el.getAttribute('data-day'))); resetTrainScroll(); });
     });
     document.getElementById('regenWeek').addEventListener('click', async ()=>{
       if(!await askConfirm('Rebuild this week?', 'A fresh week will be written. Sets you have already logged stay saved.', 'Rebuild')) return;
@@ -4337,6 +4397,7 @@ In coachNote, tell them in 2-3 sentences what you changed and why. Same JSON for
     const pct = totalSets ? Math.round((doneSets/totalSets)*100) : 0;
 
     body.innerHTML = `
+      <div class="t-sticky-head">
       <div class="t-header">
         <button class="t-back" id="backToWeek" aria-label="Back to week">‹</button>
         <div class="t-header-text">
@@ -4346,7 +4407,8 @@ In coachNote, tell them in 2-3 sentences what you changed and why. Same JSON for
       </div>
 
       <div class="t-progress-bar"><div class="t-progress-fill" style="width:${pct}%"></div></div>
-      <div style="font-size:11px; color:var(--text-faint); margin:-12px 0 18px;">${doneSets} of ${totalSets} sets logged</div>
+      <div style="font-size:11px; color:var(--text-faint); margin-top:8px;">${doneSets} of ${totalSets} sets logged</div>
+      </div>
 
       ${(day.exercises||[]).map((ex,ei)=>{
         const sets = log.exercises[ex.name] || [];
