@@ -263,7 +263,15 @@
   .manual-fields{margin-top:12px;}
 
   /* ---------------- COACH ---------------- */
-  #coachScreen{padding-bottom:calc(var(--tabbar-h) + var(--chatbar-h) + 16px);}
+  #coachScreen{
+    display:flex; flex-direction:column;
+    height:calc(100vh - var(--tabbar-h) - var(--chatbar-h));
+    height:calc(100dvh - var(--tabbar-h) - var(--chatbar-h));
+    padding-bottom:8px; overflow:hidden;
+  }
+  #coachScreen .chat-scroll{
+    flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:6px;
+  }
   .coach-header{margin-bottom:18px;}
   .coach-header .ch-title{font-size:20px; font-weight:500;}
   .coach-header .ch-sub{font-size:12px; color:var(--text-dim); margin-top:2px;}
@@ -792,6 +800,28 @@
     border-radius:var(--r-panel); padding:13px; margin:14px 0 0;
   }
 
+
+  /* ---- activity / burned ---- */
+  .burn-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:2px;}
+  .kcal.burn-on{color:var(--red);}
+  .kcal.burn-off{color:var(--text-faint);}
+  .rpe-hint{font-size:11.5px; color:var(--text-dim); line-height:1.55; margin-bottom:11px;}
+  .rpe-row{display:grid; grid-template-columns:repeat(10,1fr); gap:4px;}
+  .rpe-chip{
+    padding:9px 0; border-radius:var(--r-chip); font-size:12px; font-weight:600;
+    background:var(--bg-elev); border:1px solid var(--hairline-strong); color:var(--text-dim);
+    cursor:pointer; font-family:'Inter',sans-serif; font-variant-numeric:tabular-nums;
+    transition:transform .09s var(--ease), background-color .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .rpe-chip:active{transform:scale(0.92);}
+  .rpe-chip.on{background:var(--red); border-color:var(--red); color:#fff;}
+  .burn-toggle{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 0 2px; margin-top:16px; border-top:1px solid var(--hairline);
+  }
+  .burn-toggle .t-label{font-size:13.5px; font-weight:600; color:var(--text); line-height:1.3;}
+  .burn-toggle .t-sub{font-size:11px; color:var(--text-dim); margin-top:3px; line-height:1.45;}
+
   ::-webkit-scrollbar{height:0px; width:0px;}
 </style>
 </head>
@@ -889,6 +919,14 @@
       <div class="today-section">
         <div class="today-title">Today</div>
         <div id="mealList"></div>
+      </div>
+
+      <div class="today-section">
+        <div class="burn-head">
+          <div class="today-title" style="margin:0;">Activity</div>
+          <button class="mg-add" id="addBurnBtn" aria-label="Log activity">+</button>
+        </div>
+        <div id="burnList"></div>
       </div>
     </div>
 
@@ -1180,6 +1218,16 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="burnModal">
+  <div class="modal">
+    <div class="overlay-head">
+      <h3 class="serif" style="margin:0;" id="burnTitle">Log activity</h3>
+      <button class="overlay-x" id="burnClose" aria-label="Close">✕</button>
+    </div>
+    <div id="burnBody"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -1221,7 +1269,7 @@
   // Fill these in with YOUR project's values (see SUPABASE-SETUP.md).
   // The anon key is designed to be public — row-level security is what protects data.
   const SUPABASE_URL = 'https://vkyesksgezvalseziebm.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_jN6Px93g6l-GZ3k8H04PhQ_u4cRgHLh';
+  const SUPABASE_ANON_KEY = 'PASTE_YOUR_SUPABASE_ANON_KEY_HERE';
 
   const syncConfigured = SUPABASE_URL.indexOf('http') === 0 && SUPABASE_ANON_KEY.length > 20;
   let sb = null;
@@ -1552,11 +1600,13 @@
   async function loadDay(dateKey){
     try{ const r=await store.get('entries:'+dateKey); entries=(r&&r.value)?JSON.parse(r.value):[]; }catch(e){ entries=[]; }
     try{ const r=await store.get('widgets:'+dateKey); widgets=(r&&r.value)?JSON.parse(r.value):{water:0,sleep:''}; }catch(e){ widgets={water:0,sleep:''}; }
+    try{ const r=await store.get('burned:'+dateKey); burned=(r&&r.value)?JSON.parse(r.value):[]; }catch(e){ burned=[]; }
   }
   async function saveProfile(){ try{ await store.set('profile', JSON.stringify(profile)); return true; }catch(e){ console.error('saveProfile failed:', e); setStorageBanner(true); return false; } }
   async function saveTargets(){ try{ await store.set('targets', JSON.stringify(targets)); return true; }catch(e){ console.error('saveTargets failed:', e); setStorageBanner(true); return false; } }
   async function saveSettings(){ try{ await store.set('settings', JSON.stringify(settings)); return true; }catch(e){ console.error('saveSettings failed:', e); setStorageBanner(true); return false; } }
   async function saveEntries(){ try{ await store.set('entries:'+currentDate, JSON.stringify(entries)); }catch(e){ console.error('saveEntries failed:', e); setStorageBanner(true); } }
+  async function saveBurned(){ try{ await store.set('burned:'+currentDate, JSON.stringify(burned)); }catch(e){ console.error('saveBurned failed:', e); setStorageBanner(true); } }
   async function saveWidgets(){ try{ await store.set('widgets:'+currentDate, JSON.stringify(widgets)); }catch(e){ console.error('saveWidgets failed:', e); setStorageBanner(true); } }
   async function saveChat(){
     if(chatHistory.length>60) chatHistory=chatHistory.slice(-60);
@@ -2116,6 +2166,41 @@
   }
 
   // ================= TOTALS / RENDER: HOME =================
+  // Only activity the user chose to count changes the calorie budget.
+  function countedBurn(){ return burned.reduce((n,b)=> n + (b.counted ? (Number(b.calories)||0) : 0), 0); }
+  function totalBurn(){ return burned.reduce((n,b)=> n + (Number(b.calories)||0), 0); }
+  function effectiveTarget(){ return (targets.calories||0) + countedBurn(); }
+
+  const RPE_HINT = 'RPE is how hard it felt, 1 to 10. 1 is barely moving, 5 is working but comfortable, 8 is hard and you could not hold much more, 10 is everything you had.';
+
+  function renderBurnList(){
+    const wrap = document.getElementById('burnList');
+    if(!wrap) return;
+    if(!burned.length){
+      wrap.innerHTML = '<div class="mg-empty">Nothing logged. Tap + after a walk, run or session.</div>';
+      return;
+    }
+    wrap.innerHTML = burned.map(b=>`
+      <button class="meal-row" data-burn="${b.id}">
+        <div class="mr-left">
+          <div class="name">${escapeHtml(b.name)}</div>
+          <div class="meta">
+            <span>${Math.round(b.minutes||0)} min</span>
+            ${b.rpe?`<span>RPE ${b.rpe}</span>`:''}
+            <span>${b.counted?'counted':'not counted'}</span>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="kcal ${b.counted?'burn-on':'burn-off'}">${b.counted?'+':''}${Math.round(b.calories||0)}</div>
+          <span class="mr-edit">›</span>
+        </div>
+      </button>`).join('');
+
+    wrap.querySelectorAll('[data-burn]').forEach(btn=>{
+      btn.addEventListener('click', ()=> openBurnEditor(btn.getAttribute('data-burn')));
+    });
+  }
+
   function totals(){
     return entries.reduce((acc,e)=>{
       acc.calories+=Number(e.calories)||0; acc.protein+=Number(e.protein)||0;
@@ -2141,18 +2226,23 @@
   function render(){
     if(!mainInited) return;
     const t = totals();
+    const budget = effectiveTarget();     // target plus whatever you counted as burned
+    const burnKcal = countedBurn();
     document.getElementById('kcalConsumed').textContent = Math.round(t.calories).toLocaleString();
-    document.getElementById('kcalTarget').textContent = `of ${targets.calories.toLocaleString()} kcal`;
-    drawRing(t.calories, targets.calories);
+    document.getElementById('kcalTarget').textContent =
+      burnKcal > 0
+        ? `of ${budget.toLocaleString()} kcal, ${Math.round(burnKcal)} earned back`
+        : `of ${targets.calories.toLocaleString()} kcal`;
+    drawRing(t.calories, budget);
 
-    const remaining = targets.calories - t.calories;
+    const remaining = budget - t.calories;
     const statusEl = document.getElementById('calStatus');
     if(entries.length===0){
       statusEl.textContent = 'Log your first meal to get started';
       statusEl.className = 'cal-status';
     } else if(remaining>0){
       statusEl.textContent = `${Math.round(remaining).toLocaleString()} kcal remaining today`;
-      statusEl.className = 'cal-status' + (remaining<targets.calories*0.15 ? ' warn' : '');
+      statusEl.className = 'cal-status' + (remaining<budget*0.15 ? ' warn' : '');
     } else {
       statusEl.textContent = `${Math.round(Math.abs(remaining)).toLocaleString()} kcal over today's target`;
       statusEl.className = 'cal-status over';
@@ -2162,6 +2252,7 @@
     setMacro('carbs', t.carbs, targets.carbs);
     setMacro('fat', t.fat, targets.fat);
     renderMealList();
+    renderBurnList();
     renderWidgetsMini();
   }
   function setMacro(key, consumed, target){
@@ -2529,6 +2620,7 @@
   }
   let lastRawModelResponse = '';
   let pendingMeal = null; // set when the user taps + on a specific meal section
+  let burned = [];        // today's activity: [{id,name,minutes,rpe,calories,counted}]
 
   function extractJson(text){
     if(!text) return null;
@@ -3184,7 +3276,7 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
     document.getElementById(tabId).classList.remove('hidden');
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.getAttribute('data-tab')===tabId));
     document.getElementById('chatInputRow').classList.toggle('hidden', tabId!=='coachScreen');
-    if(tabId==='coachScreen'){ renderChat(); setTimeout(()=>document.getElementById('chatInput').focus(),100); }
+    if(tabId==='coachScreen'){ renderChat(); scrollChatToLatest(); }
     if(tabId==='progressScreen'){ renderProgressScreen(); computeInsight(); }
     if(tabId==='trainScreen'){ renderTrain(); }
   }
@@ -3218,6 +3310,15 @@ Re-estimate the WHOLE meal with that correction applied. Keep the other items as
     });
     scroll.scrollTop = scroll.scrollHeight;
   }
+  // Pin the chat to the newest message. Repeated after layout because bubbles
+  // reflow as the webfont settles.
+  function scrollChatToLatest(){
+    const jump = ()=>{ const el=document.getElementById('chatScroll'); if(el) el.scrollTop = el.scrollHeight; };
+    jump();
+    requestAnimationFrame(jump);
+    [80, 250, 500].forEach(ms=>setTimeout(jump, ms));
+  }
+
   function addTyping(){
     const scroll = document.getElementById('chatScroll');
     const el = document.createElement('div');
@@ -4192,6 +4293,17 @@ Write week 1 of their training. Start conservatively enough that there is room t
       await saveTraining();
       if(log.done){
         showToast('Session logged.');
+        // offer to estimate the burn, prefilled from what they actually did
+        const setsDone = (day.exercises||[]).reduce((n,ex)=>n+((log.exercises[ex.name]||[]).filter(st=>st.r).length),0);
+        const mins = Math.max(20, Math.round(setsDone * 3.5));
+        openBurnSheet({
+          name: `${day.name} session`,
+          minutes: mins,
+          rpe: 0,
+          counted: true,
+          _sessionSummary: `${setsDone} working sets: ` +
+            (day.exercises||[]).map(ex=>ex.name).join(', ')
+        });
         await maybeBuildNextWeek();
       }
       renderTrain();
@@ -4596,6 +4708,179 @@ Re-estimate the WHOLE meal with that correction applied, keeping the other items
 
   document.getElementById('editSave').addEventListener('click', saveEditedEntry);
   document.getElementById('editDelete').addEventListener('click', deleteEditedEntry);
+
+  // ---- activity / calories burned ----
+  let editingBurnId = null;
+  let burnPrefill = null;
+
+  function rpeRow(selected){
+    return `<div class="rpe-row">` +
+      [1,2,3,4,5,6,7,8,9,10].map(n=>
+        `<button class="rpe-chip ${selected===n?'on':''}" data-rpe="${n}">${n}</button>`).join('') +
+      `</div>`;
+  }
+
+  function burnForm(prefill){
+    const p = prefill || {};
+    return `
+      <div class="ob-field">
+        <label>What did you do?</label>
+        <input type="text" id="burnName" value="${escapeHtml(p.name||'')}" placeholder="e.g. 5km run, dog walk, upper body session">
+      </div>
+
+      <div class="portion-block" style="margin-top:4px;">
+        <div class="portion-label">How long?</div>
+        <div class="portion-row" style="grid-template-columns:38px 1fr 38px minmax(84px,1fr);">
+          <button class="portion-step" id="burnDown">−</button>
+          <input class="portion-qty" id="burnMins" type="number" inputmode="numeric" value="${Math.round(p.minutes||30)}">
+          <button class="portion-step" id="burnUp">+</button>
+          <div style="font-size:12.5px; color:var(--text-dim); align-self:center;">minutes</div>
+        </div>
+      </div>
+
+      <div class="portion-label" style="margin:16px 0 4px;">How hard was it?</div>
+      <div class="rpe-hint">${RPE_HINT}</div>
+      ${rpeRow(p.rpe||0)}
+
+      <div class="burn-toggle">
+        <div style="min-width:0;">
+          <div class="t-label">Add to today's calories</div>
+          <div class="t-sub">On: you can eat this much more today. Off: logged only.</div>
+        </div>
+        <div class="switch ${p.counted===false?'':'on'}" id="burnCountSwitch"></div>
+      </div>
+
+      <div class="sheet-actions" style="margin-top:16px;">
+        ${editingBurnId
+          ? '<button class="sheet-btn sheet-btn-ghost" id="burnDelete" style="color:var(--red); border-color:var(--red-dim);">Delete</button>'
+          : '<button class="sheet-btn sheet-btn-ghost" id="burnCancel">Cancel</button>'}
+        <button class="sheet-btn sheet-btn-primary" id="burnEstimate">${editingBurnId?'Save changes':'Estimate calories'}</button>
+      </div>`;
+  }
+
+  function wireBurnForm(){
+    const body = document.getElementById('burnBody');
+    body.querySelectorAll('[data-rpe]').forEach(c=>{
+      c.addEventListener('click', ()=>{
+        body.querySelectorAll('[data-rpe]').forEach(x=>x.classList.remove('on'));
+        c.classList.add('on');
+      });
+    });
+    document.getElementById('burnUp').addEventListener('click', ()=>{
+      const el=document.getElementById('burnMins'); el.value = Math.max(1,(Number(el.value)||0)+5);
+    });
+    document.getElementById('burnDown').addEventListener('click', ()=>{
+      const el=document.getElementById('burnMins'); el.value = Math.max(1,(Number(el.value)||0)-5);
+    });
+    document.getElementById('burnCountSwitch').addEventListener('click', function(){ this.classList.toggle('on'); });
+    const cancel = document.getElementById('burnCancel');
+    if(cancel) cancel.addEventListener('click', closeBurn);
+    const del = document.getElementById('burnDelete');
+    if(del) del.addEventListener('click', async ()=>{
+      const b = burned.find(x=>x.id===editingBurnId);
+      if(!b) return closeBurn();
+      if(!await askConfirm('Delete this activity?', `${b.name} will be removed.`, 'Delete')) return;
+      burned = burned.filter(x=>x.id!==editingBurnId);
+      await saveBurned(); render(); closeBurn(); showToast('Activity deleted.');
+    });
+    document.getElementById('burnEstimate').addEventListener('click', submitBurn);
+  }
+
+  function openBurnSheet(prefill){
+    editingBurnId = null;
+    burnPrefill = prefill || null;
+    document.getElementById('burnTitle').textContent = 'Log activity';
+    document.getElementById('burnBody').innerHTML = burnForm(prefill);
+    document.getElementById('burnModal').classList.remove('hidden');
+    wireBurnForm();
+  }
+
+  function openBurnEditor(id){
+    const b = burned.find(x=>x.id===id);
+    if(!b) return;
+    editingBurnId = id;
+    document.getElementById('burnTitle').textContent = 'Edit activity';
+    document.getElementById('burnBody').innerHTML = burnForm(b);
+    document.getElementById('burnModal').classList.remove('hidden');
+    wireBurnForm();
+  }
+
+  function closeBurn(){
+    document.getElementById('burnModal').classList.add('hidden');
+    editingBurnId = null;
+  }
+
+  async function submitBurn(){
+    const name = document.getElementById('burnName').value.trim();
+    const minutes = Number(document.getElementById('burnMins').value) || 0;
+    const rpeEl = document.querySelector('#burnBody [data-rpe].on');
+    const rpe = rpeEl ? Number(rpeEl.getAttribute('data-rpe')) : 0;
+    const counted = document.getElementById('burnCountSwitch').classList.contains('on');
+    if(!name){ showToast('Say what you did first.'); return; }
+    if(minutes <= 0){ showToast('How many minutes?'); return; }
+
+    // editing an existing one keeps its estimate unless the details changed
+    const existing = editingBurnId ? burned.find(x=>x.id===editingBurnId) : null;
+    if(existing && existing.name===name && existing.minutes===minutes && existing.rpe===rpe){
+      existing.counted = counted;
+      await saveBurned(); render(); closeBurn(); showToast('Activity updated.'); return;
+    }
+
+    const body = document.getElementById('burnBody');
+    const prev = body.innerHTML;
+    body.innerHTML = `<div style="text-align:center; padding:50px 20px;">
+      <div class="spinner" style="margin:0 auto 14px;"></div>
+      <div style="font-size:13px; color:var(--text-dim);">Estimating calories burned...</div></div>`;
+
+    const sessionDetail = (burnPrefill && burnPrefill._sessionSummary) ? ` (${burnPrefill._sessionSummary})` : '';
+    const who = [];
+    if(profile && profile.weightKg) who.push(`${Math.round(profile.weightKg)}kg`);
+    if(profile && profile.age) who.push(`${profile.age} years old`);
+    if(profile && profile.sex) who.push(profile.sex);
+
+    try{
+      const text = await callClaude([{ role:'user', content:
+        `Estimate calories burned for this activity. Person: ${who.join(', ')||'average adult'}.
+
+Activity: ${name}${sessionDetail}
+Duration: ${minutes} minutes
+${rpe?`Perceived effort: ${rpe} out of 10`:'Effort not given, assume moderate'}
+
+Estimate the NET calories burned (above resting), not gross. Be realistic rather than generous — fitness trackers routinely overestimate, and an overestimate here means they eat back calories they never burned.` }],
+        `You estimate energy expenditure for exercise. Use MET values appropriate to the activity and effort level, scaled by bodyweight and duration. Report NET calories above resting metabolic rate. Be conservative.
+
+Respond with ONLY JSON, no markdown fences:
+{"calories": number, "note": "one short sentence on how you estimated it"}`,
+        500, { json:true });
+
+      const est = extractJson(text);
+      if(!est || !(Number(est.calories) > 0)){
+        showToast("Couldn't estimate that — try describing it differently.");
+        body.innerHTML = prev; wireBurnForm(); return;
+      }
+
+      const kcal = Math.round(Number(est.calories));
+      if(existing){
+        Object.assign(existing, { name, minutes, rpe, counted, calories:kcal, note:est.note||'' });
+      } else {
+        burned.push({ id:cryptoId(), name, minutes, rpe, counted, calories:kcal, note:est.note||'',
+                      loggedAt:new Date().toISOString() });
+      }
+      await saveBurned();
+      render();
+      closeBurn();
+      showToast(counted ? `${kcal} kcal burned, added to today.` : `${kcal} kcal burned, logged only.`);
+    }catch(e){
+      showToast((e&&e.message)||'That failed — try again.');
+      body.innerHTML = prev; wireBurnForm();
+    }
+  }
+
+  document.getElementById('addBurnBtn').addEventListener('click', ()=>openBurnSheet());
+  document.getElementById('burnClose').addEventListener('click', closeBurn);
+  document.getElementById('burnModal').addEventListener('click', e=>{
+    if(e.target.id === 'burnModal') closeBurn();
+  });
 
   // ================= INIT =================
   loadAll();
